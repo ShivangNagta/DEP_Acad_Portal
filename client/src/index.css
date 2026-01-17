@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* --- LIGHT THEME --- */
+    --bg: 248 244 238;
+    --surface: 255 255 255;
+    --text: 28 25 23;
+    --muted: 110 100 90;
+    --border: 210 200 190;
+
+    --primary: 123 94 68;
+    --primary-soft: 230 210 190;
+    --accent: 172 127 140;
+    --bg-bottom: 210 200 200;
+  }
+
+  .dark {
+    /* --- DARK THEME --- */
+    --bg: 15 17 22;
+    --surface: 30 33 40;
+    --text: 235 235 240;
+    --muted: 156 163 175;
+    --border: 55 65 81;
+
+    --primary: 140 180 190;
+    --primary-soft: 45 55 65;
+    --accent: 192 132 252;
+    --bg-bottom: 10 12 15;
+  }
+
+  html {
+    background-color: rgb(var(--bg));
+    color: rgb(var(--text));
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out forwards;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% 0%, rgb(var(--primary) / 0.15), transparent 40%),
+    linear-gradient(180deg, rgb(var(--bg)), rgb(var(--bg-bottom)));
+}
+
+.bg-solid-surface {
+  background-color: rgb(var(--surface));
+}
