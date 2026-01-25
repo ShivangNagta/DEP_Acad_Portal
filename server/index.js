@@ -17,6 +17,15 @@ const logger = pino({
 const app = express();
 const port = process.env.PORT || 3000;
 
+app.set('trust proxy', 1);
+
+app.use((err, req, res, next) => {
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'CORS blocked' });
+  }
+  next(err);
+});
+
 // Security middleware
 app.use(helmet());
 
@@ -28,23 +37,9 @@ const limiter = rateLimit({
 });
 app.use('/auth', limiter);
 
-// CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
-  'http://localhost:3000',
-  'http://localhost:5173'
-];
-
-// Requests with no origin allowed
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      logger.warn(`Blocked CORS request from: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
+  origin: true,
+  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -115,7 +110,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   logger.info(`Server running on port ${port}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
