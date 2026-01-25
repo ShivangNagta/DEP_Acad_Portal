@@ -152,10 +152,10 @@ export default function OTPLogin() {
                                 icon={KeyRound}
                                 type="text"
                                 label="One-Time Password"
-                                placeholder="e.g. 12345678"
+                                placeholder="e.g. 123456"
                                 value={otp}
                                 onChange={e => setOtp(e.target.value)}
-                                maxLength={8}
+                                maxLength={6}
                                 autoFocus
                                 className="tracking-widest font-mono text-center text-lg"
                             />

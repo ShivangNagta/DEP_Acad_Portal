@@ -6,7 +6,7 @@ const getAllUsers = async (req, res) => {
     try {
         const { data: users, error } = await supabase
             .from('users')
-            .select('*')
+            .select('*, departments(id, name, code)')
             .order('created_at', { ascending: false });
         // console.log(data)
         if (error) {
@@ -24,7 +24,7 @@ const getAllUsers = async (req, res) => {
 // Add new user (professor/student) - Only emails allowed in users table can login
 const addUser = async (req, res) => {
     try {
-        const { email, role, entry_number } = req.body;
+        const { email, role, entry_number, name, batch, department_id } = req.body;
 
         if (!email || !role) {
             return res.status(400).json({
@@ -53,13 +53,16 @@ const addUser = async (req, res) => {
         const userData = {
             email,
             role,
-            entry_number: role === 'student' ? entry_number : null
+            name: name || null,
+            entry_number: role === 'student' ? entry_number : null,
+            batch: role === 'student' ? batch : null,
+            department_id: department_id || null
         };
 
         const { data, error } = await supabase
             .from('users')
             .insert([userData])
-            .select()
+            .select('*, departments(id, name, code)')
             .single();
 
         if (error) {
@@ -74,6 +77,7 @@ const addUser = async (req, res) => {
             metadata: {
                 user_email: email,
                 role,
+                name,
                 added_by: req.user.email
             }
         });
@@ -226,10 +230,86 @@ const getUserStats = async (req, res) => {
     }
 };
 
+// Get enrollment/drop deadline (returns the deadline from any course as they should all be the same)
+const getEnrollmentDeadline = async (req, res) => {
+    try {
+        // Get the first course that has an enrollment_deadline set
+        const { data, error } = await supabase
+            .from('courses')
+            .select('enrollment_deadline')
+            .order('created_at', { ascending: true })
+            .limit(1);
+
+        if (error) {
+            logger.error('Supabase error in getEnrollmentDeadline:', error);
+            throw error;
+        }
+
+        // Check if any course has a deadline
+        let deadline = null;
+        if (data && data.length > 0 && data[0].enrollment_deadline) {
+            deadline = data[0].enrollment_deadline;
+        }
+
+        res.json({ deadline });
+    } catch (error) {
+        logger.error('Get enrollment deadline error:', error);
+        res.status(400).json({ error: error.message });
+    }
+};
+
+// Set enrollment/drop deadline for all courses
+const setEnrollmentDeadline = async (req, res) => {
+    try {
+        const { deadline } = req.body;
+        const user_id = req.user.id;
+
+        if (!deadline) {
+            return res.status(400).json({ error: 'Deadline date is required' });
+        }
+
+        // Validate date format
+        const deadlineDate = new Date(deadline);
+        if (isNaN(deadlineDate.getTime())) {
+            return res.status(400).json({ error: 'Invalid date format' });
+        }
+
+        const { data, error } = await supabase
+            .from('courses')
+            .update({ enrollment_deadline: deadline })
+            .not('id', 'is', null)   // WHERE id IS NOT NULL  (updates all rows)
+            .select()
+
+        if (error) throw error;
+
+
+        // Log audit
+        await supabase.from('audit_logs').insert({
+            actor_id: user_id,
+            action: 'SET_ENROLLMENT_DEADLINE',
+            metadata: {
+                deadline,
+                courses_updated: data?.length || 0
+            }
+        });
+
+        res.json({ 
+            message: 'Enrollment deadline updated successfully for all courses',
+            deadline: deadline,
+            courses_updated: data?.length || 0
+        });
+    } catch (error) {
+        logger.error('Set enrollment deadline error:', error);
+        res.status(400).json({ error: error.message });
+    }
+};
+
 module.exports = {
     getAllUsers,
     addUser,
     updateUser,
     deleteUser,
-    getUserStats
+    getUserStats,
+    getEnrollmentDeadline,
+    setEnrollmentDeadline
 };

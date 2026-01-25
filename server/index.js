@@ -71,6 +71,8 @@ const studentRoutes = require('./routes/api/student.route');
 const gradeRoutes = require('./routes/api/grade.route');
 const auditRoutes = require('./routes/api/audit.route');
 const adminRoutes = require('./routes/api/admin.route');
+const departmentRoutes = require('./routes/api/department.route');
+const feedbackRoutes = require('./routes/api/feedback.route');
 
 app.use('/api/admin', adminRoutes);
 app.use('/auth', authRoutes);
@@ -79,6 +81,8 @@ app.use('/api/enrollments', enrollmentRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/audits', auditRoutes);
+app.use('/api/departments', departmentRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 
 // Health check endpoint

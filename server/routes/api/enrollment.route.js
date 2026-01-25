@@ -6,7 +6,8 @@ const {
     getAllEnrollments,
     requestEnrollment,
     updateEnrollmentStatus,
-    deleteEnrollment
+    deleteEnrollment,
+    dropCourse
 } = require('../../controllers/enrollment.controller');
 
 router.use(authenticate);
@@ -16,6 +17,9 @@ router.get('/', getAllEnrollments);
 
 // Students can request enrollment
 router.post('/', authorize('student'), requestEnrollment);
+
+// Students can drop a course
+router.post('/drop', authorize('student'), dropCourse);
 
 // Professors can update enrollment status
 router.put('/:id/status', authorize('professor'), updateEnrollmentStatus);

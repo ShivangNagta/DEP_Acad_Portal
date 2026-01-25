@@ -106,6 +106,8 @@ const verifyOTP = async (req, res) => {
         email: data.user.email,
         role: userData.role,
         entryNumber: userData.entry_number,
+        batch: userData.batch,
+        departmentId: userData.department_id,
         accessToken: data.session.access_token,
         refreshToken: data.session.refresh_token,
         expiresIn: data.session.expires_in,
