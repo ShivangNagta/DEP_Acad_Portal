@@ -651,6 +651,7 @@ const DirectoryView = ({ courses, loading }) => {
                     <thead className="bg-[rgb(var(--bg))] text-[rgb(var(--muted))] font-bold text-xs uppercase tracking-wider">
                         <tr>
                             <th className="px-6 py-4">Course</th>
+                            <th className="px-6 py-4">Slot</th>
                             <th className="px-6 py-4">Department</th>
                             <th className="px-6 py-4">Instructor</th>
                             <th className="px-6 py-4">Session</th>
@@ -662,6 +663,13 @@ const DirectoryView = ({ courses, loading }) => {
                                 <td className="px-6 py-4">
                                     <div className="font-bold text-[rgb(var(--text))]">{c.title}</div>
                                     <div className="text-xs text-[rgb(var(--muted))] font-mono mt-0.5">{c.course_code} • {c.credits} Credits</div>
+                                </td>
+                                <td className="px-6 py-4">
+                                    {c.slot ? (
+                                        <span className="text-xs font-bold bg-[rgb(var(--primary))]/10 text-[rgb(var(--primary))] px-2 py-1 rounded font-mono">{c.slot}</span>
+                                    ) : (
+                                        <span className="text-xs text-[rgb(var(--muted))]">—</span>
+                                    )}
                                 </td>
                                 <td className="px-6 py-4 font-bold text-xs uppercase">{c.instructor?.departments?.name || 'N/A'}</td>
                                 <td className="px-6 py-4 text-[rgb(var(--muted))] text-xs">
@@ -1013,27 +1021,52 @@ const CourseModal = ({ onClose, onSubmit, loading }) => {
         return options;
     };
 
+    const slots = ['T-PCPE', 'PC-1', 'PC-2', 'PC-3', 'PC-4', 'HSME', 'PCPE', 'HSPE', 'PHSME'];
     const sessions = getSessionOptions();
     const [departments, setDepartments] = useState([]);
+    const [myCourses, setMyCourses] = useState([]);
+    const [slotError, setSlotError] = useState('');
+    const token = localStorage.getItem('access_token');
     const [form, setForm] = useState({ 
         title: '', 
         course_code: '', 
         credits: 3, 
         academic_session: sessions[1], 
+        slot: '',
         eligible_batches: [],
         eligible_departments: []
     });
 
-    // Fetch departments on mount
+    // Fetch departments and current courses on mount
     useEffect(() => {
-        const fetchDepts = async () => {
+        const fetchData = async () => {
             try {
-                const res = await fetch(`${API_BASE}/departments`);
-                if (res.ok) setDepartments(await res.json());
+                const [deptsRes, coursesRes] = await Promise.all([
+                    fetch(`${API_BASE}/departments`),
+                    fetch(`${API_BASE}/courses`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    })
+                ]);
+                
+                if (deptsRes.ok) setDepartments(await deptsRes.json());
+                if (coursesRes.ok) setMyCourses(await coursesRes.json());
             } catch (e) { console.error(e); }
         };
-        fetchDepts();
+        fetchData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    const handleSlotChange = (newSlot) => {
+        setForm(prev => ({ ...prev, slot: newSlot }));
+        
+        // Check if professor already has a course with this slot
+        const conflictingCourse = myCourses.find(c => c.slot === newSlot);
+        if (conflictingCourse) {
+            setSlotError(`You already have "${conflictingCourse.title}" in slot ${newSlot}`);
+        } else {
+            setSlotError('');
+        }
+    };
 
     const toggleBatch = (batch) => {
         setForm(prev => ({
@@ -1085,6 +1118,33 @@ const CourseModal = ({ onClose, onSubmit, loading }) => {
                         <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Credits</label>
                         <PortalInput type="number" required min="1" max="10" value={form.credits} onChange={e => setForm({ ...form, credits: +e.target.value })} />
                     </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Slot (Required) *</label>
+                    <div className="relative">
+                        <select
+                            required
+                            value={form.slot}
+                            onChange={e => handleSlotChange(e.target.value)}
+                            className={`w-full pl-3 pr-8 py-2.5 rounded-xl bg-[rgb(var(--bg))] border-2 outline-none appearance-none cursor-pointer text-sm font-medium transition-colors
+                                ${slotError 
+                                    ? 'border-red-300 text-red-600 focus:border-red-500' 
+                                    : 'border-[rgb(var(--border))] text-[rgb(var(--text))] focus:border-[rgb(var(--primary))]'
+                                }`}
+                        >
+                            <option value="">Select a slot...</option>
+                            {slots.map(slot => (
+                                <option key={slot} value={slot}>{slot}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[rgb(var(--muted))] pointer-events-none" />
+                    </div>
+                    {slotError && (
+                        <p className="text-xs text-red-600 flex items-center gap-1">
+                            <AlertCircle size={14} /> {slotError}
+                        </p>
+                    )}
                 </div>
 
                 <div className="space-y-2">

@@ -297,11 +297,36 @@ export default function StudentDashboard() {
     }
   };
 
+  // Grade point mapping (10-point scale)
+  const gradePointMap = {
+    'A': 10.0, 'A-': 9.0, 'B': 8.0, 'B-': 7.0, 'C': 6.0, 'C-': 5.0, 'D': 4.0, 'F': 0.0
+  };
+
   const cgpa = useMemo(() => {
     if (!grades.length) return 'N/A';
-    const total = grades.reduce((acc, curr) => acc + curr.marks, 0);
-    return ((total / grades.length) / 10).toFixed(2);
-  }, [grades]);
+    
+    // Filter only passing grades (A to D) - exclude F and NP/NF
+    const passingGrades = grades.filter(g => ['A', 'A-', 'B', 'B-', 'C', 'C-', 'D'].includes(g.grade));
+    
+    if (passingGrades.length === 0) return 'N/A';
+    
+    // Calculate cumulative points and earned credits
+    let cumulativePoints = 0;
+    let cumulativeCredits = 0;
+    
+    passingGrades.forEach(grade => {
+      const enrollment = enrollments.find(e => e.course_id === grade.course_id && e.semester === grade.semester);
+      const credits = enrollment?.course?.credits || 0;
+      const gradePoint = gradePointMap[grade.grade] || 0;
+      
+      cumulativePoints += gradePoint * credits;
+      cumulativeCredits += credits;
+    });
+    
+    if (cumulativeCredits === 0) return 'N/A';
+    const calculatedCgpa = cumulativePoints / cumulativeCredits;
+    return calculatedCgpa.toFixed(2);
+  }, [grades, enrollments]);
 
   // Calculate semester-wise statistics
   const getSemesterStats = (semester) => {
@@ -310,33 +335,48 @@ export default function StudentDashboard() {
     
     if (semesterGrades.length === 0) {
       return {
-        gpa: 'N/A',
-        totalCredits: 0,
+        sgpa: 'N/A',
+        earnedCredits: 0,
+        creditsRegistered: 0,
         courses: []
       };
     }
 
-    // Calculate GPA (4.0 scale)
+    // Grade point mapping (10-point scale)
     const gradePoints = {
-      'A': 4.0, 'A+': 4.0, 'A-': 3.7,
-      'B': 3.0, 'B+': 3.3, 'B-': 2.7,
-      'C': 2.0, 'C+': 2.3, 'C-': 1.7,
-      'D': 1.0, 'D+': 1.3, 'D-': 0.7,
-      'F': 0.0
+      'A': 10.0, 'A-': 9.0, 'B': 8.0, 'B-': 7.0, 'C': 6.0, 'C-': 5.0, 'D': 4.0, 'F': 0.0
     };
 
-    const totalGradePoints = semesterGrades.reduce((sum, g) => {
+    // Calculate SGPA: includes all grades A-F
+    let totalPoints = 0;
+    let creditsRegistered = 0;
+
+    // Earned Credits: sum of credits for courses with A-D grades only
+    let earnedCredits = 0;
+
+    semesterGrades.forEach(g => {
       const courseEnrollment = semesterEnrollments.find(e => e.course_id === g.course_id);
       const credits = courseEnrollment?.course?.credits || 0;
-      return sum + ((gradePoints[g.grade] || 0) * credits);
-    }, 0);
+      const gradePoint = gradePoints[g.grade] || 0;
+      
+      // All grades A-F contribute to points and registered credits
+      if (['A', 'A-', 'B', 'B-', 'C', 'C-', 'D', 'F'].includes(g.grade)) {
+        totalPoints += gradePoint * credits;
+        creditsRegistered += credits;
+      }
+      
+      // Only passing grades (A-D with minus) contribute to earned credits
+      if (['A', 'A-', 'B', 'B-', 'C', 'C-', 'D'].includes(g.grade)) {
+        earnedCredits += credits;
+      }
+    });
 
-    const totalCredits = semesterEnrollments.reduce((sum, e) => sum + (e.course?.credits || 0), 0);
-    const gpa = totalCredits > 0 ? (totalGradePoints / totalCredits).toFixed(2) : 'N/A';
+    const sgpa = creditsRegistered > 0 ? (totalPoints / creditsRegistered).toFixed(2) : 'N/A';
 
     return {
-      gpa,
-      totalCredits,
+      sgpa,
+      earnedCredits,
+      creditsRegistered,
       courses: semesterGrades
     };
   };
@@ -592,6 +632,7 @@ export default function StudentDashboard() {
                         status={course.enrollment_status === 'not_enrolled' ? null : course.enrollment_status}
                         onEnroll={handleEnroll}
                         loading={actionLoading === course.id}
+                        enrollments={enrollments}
                       />
                     </div>
                   ))
@@ -884,12 +925,12 @@ export default function StudentDashboard() {
                           <>
                             <div className="grid grid-cols-2 gap-3 mb-4">
                               <div className="p-3 rounded-lg bg-[rgb(var(--bg))] border border-[rgb(var(--border))]">
-                                <p className="text-xs text-[rgb(var(--muted))] font-bold mb-1">Semester GPA</p>
-                                <p className="text-2xl font-bold text-[rgb(var(--primary))]">{semStats.gpa}</p>
+                                <p className="text-xs text-[rgb(var(--muted))] font-bold mb-1">Semester SGPA</p>
+                                <p className="text-2xl font-bold text-[rgb(var(--primary))]">{semStats.sgpa}</p>
                               </div>
                               <div className="p-3 rounded-lg bg-[rgb(var(--bg))] border border-[rgb(var(--border))]">
-                                <p className="text-xs text-[rgb(var(--muted))] font-bold mb-1">Credits Earned</p>
-                                <p className="text-2xl font-bold text-[rgb(var(--primary))]">{semStats.totalCredits}</p>
+                                <p className="text-xs text-[rgb(var(--muted))] font-bold mb-1">Earned Credits</p>
+                                <p className="text-2xl font-bold text-[rgb(var(--primary))]">{semStats.earnedCredits}</p>
                               </div>
                             </div>
 
@@ -959,12 +1000,9 @@ export default function StudentDashboard() {
 
 // --- SUB-COMPONENTS ---
 
-const CourseCard = ({ course, status, onEnroll, loading }) => {
+const CourseCard = ({ course, status, onEnroll, loading, enrollments = [] }) => {
   const [selectedSemester, setSelectedSemester] = useState('');
   const semesters = ['sem-1', 'sem-2', 'sem-3', 'sem-4', 'sem-5', 'sem-6', 'sem-7', 'sem-8'];
-  const [enrollments] = useState(() => {
-    return [];
-  });
   
   const _canEnroll = true;
 
@@ -975,7 +1013,14 @@ const CourseCard = ({ course, status, onEnroll, loading }) => {
     return 24 - usedCredits;
   };
 
+  const getSlotConflict = () => {
+    if (!selectedSemester || !course.slot) return null;
+    const activeEnrollments = enrollments.filter(e => e.semester === selectedSemester && (e.status === 'pending' || e.status === 'approved'));
+    return activeEnrollments.find(e => e.course?.slot === course.slot);
+  };
+
   const availableCredits = getAvailableCredits();
+  const slotConflict = getSlotConflict();
   const _canEnrollCourse = !selectedSemester || availableCredits >= (course.credits || 0);
 
   return (
@@ -996,6 +1041,12 @@ const CourseCard = ({ course, status, onEnroll, loading }) => {
 
         {/* Course Details */}
         <div className="space-y-2 text-xs border-t border-[rgb(var(--border))] pt-3">
+          {course.slot && (
+            <div className="flex justify-between">
+              <span className="text-[rgb(var(--muted))] font-bold">Slot:</span>
+              <span className="text-[rgb(var(--text))] font-mono font-bold bg-[rgb(var(--primary))]/10 px-2 py-0.5 rounded">{course.slot}</span>
+            </div>
+          )}
           {course.academic_session && (
             <div className="flex justify-between">
               <span className="text-[rgb(var(--muted))] font-bold">Session:</span>
@@ -1072,6 +1123,17 @@ const CourseCard = ({ course, status, onEnroll, loading }) => {
             </select>
           </div>
           
+          {/* Slot Conflict Warning */}
+          {slotConflict && (
+            <div className="p-3 rounded-lg bg-red-50 border-2 border-red-200 flex items-start gap-2">
+              <AlertCircle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-red-600 font-bold">
+                <div>Slot Conflict!</div>
+                <div className="text-[11px] mt-0.5">You already have <span className="text-red-700">{slotConflict.course?.title}</span> in slot {course.slot}</div>
+              </div>
+            </div>
+          )}
+          
           {/* Credit Usage Indicator */}
           {selectedSemester && (
             <div className="space-y-1 p-2 rounded-lg bg-[rgb(var(--bg))] border border-[rgb(var(--border))]">
@@ -1100,7 +1162,7 @@ const CourseCard = ({ course, status, onEnroll, loading }) => {
           <PortalButton 
             onClick={() => onEnroll(course.id, selectedSemester)} 
             loading={loading} 
-            disabled={!selectedSemester || !_canEnroll}
+            disabled={!selectedSemester || !_canEnroll || slotConflict}
           >
             Enroll Now <ArrowRight size={16} />
           </PortalButton>
