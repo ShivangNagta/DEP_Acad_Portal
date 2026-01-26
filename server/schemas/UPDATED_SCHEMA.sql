@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS courses (
     instructor_id UUID REFERENCES users(id),
     academic_session TEXT,
     enrollment_deadline DATE COMMENT 'Deadline for students to enroll/drop this course',
+    slot TEXT CHECK (slot IN ('T-PCPE', 'PC-1', 'PC-2', 'PC-3', 'PC-4', 'HSME', 'PCPE', 'HSPE', 'PHSME')) COMMENT 'Course slot/time slot',
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

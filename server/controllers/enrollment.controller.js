@@ -129,6 +129,25 @@ const requestEnrollment = async (req, res) => {
       return res.status(400).json({ error: `Credit limit exceeded. Maximum 24 credits per semester, you have ${totalCredits + courseCredits}` });
     }
 
+    // Check if student already has a course in the same slot for this semester
+    if (course.slot) {
+      const { data: sameSlotEnrollments } = await supabase
+        .from('enrollments')
+        .select('course:courses(slot, id, title)')
+        .eq('student_id', req.user.id)
+        .eq('semester', semester)
+        .in('status', ['pending', 'approved']);
+
+      if (sameSlotEnrollments && sameSlotEnrollments.length > 0) {
+        const conflictingCourse = sameSlotEnrollments.find(e => e.course?.slot === course.slot);
+        if (conflictingCourse) {
+          return res.status(400).json({ 
+            error: `Cannot enroll in multiple courses of the same slot. You already have "${conflictingCourse.course?.title}" in slot ${course.slot}.` 
+          });
+        }
+      }
+    }
+
     const enrollmentData = {
       course_id,
       student_id: req.user.id,

@@ -134,10 +134,28 @@ const getCourseById = async (req, res) => {
 
 const createCourse = async (req, res) => {
   try {
-    const { course_code, title, credits, academic_session, eligible_batches, eligible_departments } = req.body;
+    const { course_code, title, credits, academic_session, eligible_batches, eligible_departments, slot } = req.body;
 
-    if (!course_code || !title) {
-      return res.status(400).json({ error: 'Course code and title are required' });
+    if (!course_code || !title || !slot) {
+      return res.status(400).json({ error: 'Course code, title, and slot are required' });
+    }
+
+    // Validate slot value
+    const validSlots = ['T-PCPE', 'PC-1', 'PC-2', 'PC-3', 'PC-4', 'HSME', 'PCPE', 'HSPE', 'PHSME'];
+    if (!validSlots.includes(slot)) {
+      return res.status(400).json({ error: 'Invalid slot value' });
+    }
+
+    // Check if professor already has a course with this slot
+    const { data: existingCourse } = await supabase
+      .from('courses')
+      .select('id')
+      .eq('instructor_id', req.user.id)
+      .eq('slot', slot)
+      .single();
+
+    if (existingCourse) {
+      return res.status(400).json({ error: `You already have a course in slot ${slot}. Each professor can propose only one course per slot.` });
     }
 
     const initialStatus = req.user.role === 'admin' ? 'approved' : 'pending';
@@ -149,6 +167,7 @@ const createCourse = async (req, res) => {
       credits,
       instructor_id: req.user.id,
       academic_session,
+      slot,
       status: initialStatus
     };
 
