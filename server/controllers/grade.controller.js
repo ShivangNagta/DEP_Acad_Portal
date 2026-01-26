@@ -191,7 +191,7 @@ const deleteGrade = async (req, res) => {
 
 const getAllGrades = async (req, res) => {
   try {
-    let query = supabase.from('grades').select(`*, course:courses(*), student:users(email, entry_number)`);
+    let query = supabase.from('grades').select(`*, course:courses(id, course_code, title, credits, academic_session, instructor_id, instructor:users(id, name, entry_number, departments(name, code))), student:users(id, name, entry_number, batch, department_id, departments(name, code))`);
 
     if (req.user.role === 'professor') {
       // Professors see grades for their courses
@@ -217,8 +217,14 @@ const submitGrade = async (req, res) => {
   try {
     const { course_id, student_id, marks, semester } = req.body;
 
-    if (!course_id || !student_id || marks === undefined) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!course_id || !student_id || marks === undefined || !semester) {
+      return res.status(400).json({ error: 'Missing required fields (course_id, student_id, marks, semester)' });
+    }
+
+    // Validate semester format
+    const validSemesters = ['sem-1', 'sem-2', 'sem-3', 'sem-4', 'sem-5', 'sem-6', 'sem-7', 'sem-8'];
+    if (!validSemesters.includes(semester)) {
+      return res.status(400).json({ error: 'Invalid semester' });
     }
 
     const initialStatus = req.user.role === 'admin' ? 'published' : 'submitted';
@@ -228,7 +234,7 @@ const submitGrade = async (req, res) => {
       student_id,
       marks,
       grade: calculateGrade(marks),
-      semester: semester || 1,
+      semester,
       status: initialStatus
     };
 

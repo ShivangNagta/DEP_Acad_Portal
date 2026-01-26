@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom'; // Import Portal
 import {
     UserPlus, Trash2, Users, Layers, X,
     FlaskConical, Loader2, Check, Search,
     Mail, Hash, GraduationCap, ChevronDown,
-    ChevronLeft, ChevronRight, Filter
+    ChevronLeft, ChevronRight, Filter, Download, Upload
 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 
@@ -113,13 +113,14 @@ const AdminButton = ({ children, loading, onClick, variant = 'primary', disabled
 
 export default function UserManagement() {
     const [users, setUsers] = useState([]);
+    const [departments, setDepartments] = useState([]);
     const [stats, setStats] = useState({ total: 0, professors: 0, students: 0 });
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
-    const [newUser, setNewUser] = useState({ email: '', role: 'student', entry_number: '' });
+    const [newUser, setNewUser] = useState({ email: '', role: 'student', entry_number: '', name: '', batch: '', department_id: '' });
     const [showBulkModal, setShowBulkModal] = useState(false);
 
     const token = () => localStorage.getItem('access_token');
@@ -127,6 +128,7 @@ export default function UserManagement() {
     useEffect(() => {
         fetchUsers();
         fetchStats();
+        fetchDepartments();
     }, []);
 
     useEffect(() => {
@@ -147,6 +149,13 @@ export default function UserManagement() {
         } catch { }
     };
 
+    const fetchDepartments = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/departments`, { headers: { Authorization: `Bearer ${token()}` } });
+            if (res.ok) setDepartments(await res.json());
+        } catch { console.error('Failed to fetch departments'); }
+    };
+
     const addUser = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -154,12 +163,12 @@ export default function UserManagement() {
             const res = await fetch(`${API_BASE}/users`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(newUser)
+                body: JSON.stringify({...newUser, department_id: newUser.department_id || null, batch: newUser.role === 'professor' ? null : newUser.batch})
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
             setMessage('User added successfully.');
-            setNewUser({ email: '', role: 'student', entry_number: '' });
+            setNewUser({ email: '', role: 'student', entry_number: '', name: '', batch: '', department_id: '' });
             fetchUsers();
             fetchStats();
             setTimeout(() => setMessage(''), 3000);
@@ -196,7 +205,8 @@ export default function UserManagement() {
 
     const filteredUsers = users.filter(u => {
         const matchesSearch = u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (u.entry_number && u.entry_number.toLowerCase().includes(searchTerm.toLowerCase()));
+            (u.entry_number && u.entry_number.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (u.name && u.name.toLowerCase().includes(searchTerm.toLowerCase()));
         const matchesRole = filterRole === 'all' || u.role === filterRole;
         return matchesSearch && matchesRole;
     });
@@ -231,41 +241,75 @@ export default function UserManagement() {
                     </button>
                 </div>
 
-                <form onSubmit={addUser} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                    <div className="md:col-span-5">
-                        <AdminInput
-                            icon={Mail}
-                            label="Email Address"
-                            placeholder="user@iitrpr.ac.in"
-                            value={newUser.email}
-                            onChange={e => setNewUser({ ...newUser, email: e.target.value })}
-                        />
-                    </div>
-                    <div className="md:col-span-3">
-                        <AdminSelect
-                            icon={GraduationCap}
-                            label="Role"
-                            options={[{ label: 'Student', value: 'student' }, { label: 'Professor', value: 'professor' }]}
-                            value={newUser.role}
-                            onChange={e => setNewUser({ ...newUser, role: e.target.value })}
-                        />
-                    </div>
-                    <div className="md:col-span-2">
-                        {newUser.role === 'student' ? (
+                <form onSubmit={addUser} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                        <div className="md:col-span-3">
                             <AdminInput
-                                icon={Hash}
-                                label="Entry No."
-                                placeholder="2026CSB..."
-                                value={newUser.entry_number}
-                                onChange={e => setNewUser({ ...newUser, entry_number: e.target.value })}
+                                icon={Mail}
+                                label="Email Address"
+                                placeholder="user@iitrpr.ac.in"
+                                value={newUser.email}
+                                onChange={e => setNewUser({ ...newUser, email: e.target.value })}
                             />
-                        ) : <div className="h-[76px] w-full" />}
+                        </div>
+                        <div className="md:col-span-3">
+                            <AdminInput
+                                icon={Users}
+                                label="Full Name"
+                                placeholder="John Doe"
+                                value={newUser.name}
+                                onChange={e => setNewUser({ ...newUser, name: e.target.value })}
+                            />
+                        </div>
+                        <div className="md:col-span-2">
+                            <AdminSelect
+                                icon={GraduationCap}
+                                label="Role"
+                                options={[{ label: 'Student', value: 'student' }, { label: 'Professor', value: 'professor' }]}
+                                value={newUser.role}
+                                onChange={e => setNewUser({ ...newUser, role: e.target.value })}
+                            />
+                        </div>
+                        <div className="md:col-span-2">
+                            <AdminSelect
+                                label="Department"
+                                options={[{ label: 'Select...', value: '' }, ...departments.map(d => ({ label: `${d.name} (${d.code})`, value: d.id }))]}
+                                value={newUser.department_id}
+                                onChange={e => setNewUser({ ...newUser, department_id: e.target.value })}
+                            />
+                        </div>
+                        <div className="md:col-span-2">
+                            <AdminButton loading={loading} type="submit">
+                                <UserPlus size={20} /> Add User
+                            </AdminButton>
+                        </div>
                     </div>
-                    <div className="md:col-span-2">
-                        <AdminButton loading={loading}>
-                            <UserPlus size={20} /> Add
-                        </AdminButton>
-                    </div>
+
+                    {newUser.role === 'student' && (
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 pt-2 border-t border-[rgb(var(--border))]">
+                            <div className="md:col-span-3">
+                                <AdminInput
+                                    icon={Hash}
+                                    label="Entry Number"
+                                    placeholder="2026CSB001"
+                                    value={newUser.entry_number}
+                                    onChange={e => setNewUser({ ...newUser, entry_number: e.target.value })}
+                                />
+                            </div>
+                            <div className="md:col-span-3">
+                                <AdminInput
+                                    label="Batch Year"
+                                    type="number"
+                                    placeholder="2026"
+                                    min="2000"
+                                    max={new Date().getFullYear()}
+                                    value={newUser.batch}
+                                    onChange={e => setNewUser({ ...newUser, batch: e.target.value })}
+                                />
+                            </div>
+                            <div className="md:col-span-6"></div>
+                        </div>
+                    )}
                 </form>
 
                 {message && (
@@ -317,16 +361,17 @@ export default function UserManagement() {
                         <thead className="bg-[rgb(var(--bg))] text-[rgb(var(--muted))] border-b border-[rgb(var(--border))] font-bold text-xs uppercase tracking-wider">
                             <tr>
                                 <th className="px-6 py-4">Email</th>
+                                <th className="px-6 py-4">Name</th>
                                 <th className="px-6 py-4">Role</th>
+                                <th className="px-6 py-4">Department</th>
                                 <th className="px-6 py-4">Entry No.</th>
-                                <th className="px-6 py-4">Created</th>
                                 <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[rgb(var(--border))]">
                             {paginatedUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan="5" className="p-8 text-center text-[rgb(var(--muted))] font-medium">
+                                    <td colSpan="6" className="p-8 text-center text-[rgb(var(--muted))] font-medium">
                                         No users found matching your filters.
                                     </td>
                                 </tr>
@@ -334,7 +379,9 @@ export default function UserManagement() {
                                 paginatedUsers.map(u => (
                                     <tr key={u.id} className="hover:bg-[rgb(var(--bg))] transition-colors animate-in fade-in duration-200">
                                         <td className="px-6 py-4 font-bold text-[rgb(var(--text))]">{u.email}</td>
+                                        <td className="px-6 py-4 text-[rgb(var(--text))]">{u.name || '-'}</td>
                                         <td className="px-6 py-4"><RoleBadge role={u.role} /></td>
+                                        <td className="px-6 py-4 text-[rgb(var(--muted))]">{u.departments?.name ? `${u.departments.name} (${u.departments.code})` : '-'}</td>
                                         <td className="px-6 py-4 font-mono text-[rgb(var(--muted))]">{u.entry_number || '-'}</td>
                                         <td className="px-6 py-4 text-[rgb(var(--muted))]">{new Date(u.created_at).toLocaleDateString()}</td>
                                         <td className="px-6 py-4 text-right">
@@ -415,13 +462,14 @@ const RoleBadge = ({ role }) => {
     );
 };
 
-/* --- BULK GENERATOR MODAL --- */
+/* --- BULK UPLOAD MODAL --- */
 
 const BulkGeneratorModal = ({ onClose, onSubmit, loading }) => {
-    const [form, setForm] = useState({ year: new Date().getFullYear(), dept: 'CSB', start: 1100, end: 1110 });
-    const [preview, setPreview] = useState([]);
-    const [isTestMode, setIsTestMode] = useState(false);
-    const [baseEmail, setBaseEmail] = useState('');
+    const [step, setStep] = useState('upload');
+    const [parsedData, setParsedData] = useState([]);
+    const [departments, setDepartments] = useState([]);
+    const fileInputRef = useRef(null);
+    const token = () => localStorage.getItem('access_token');
 
     useEffect(() => {
         document.body.style.overflow = 'hidden';
@@ -429,113 +477,164 @@ const BulkGeneratorModal = ({ onClose, onSubmit, loading }) => {
     }, []);
 
     useEffect(() => {
-        const rows = [];
-        const start = parseInt(form.start), end = parseInt(form.end);
+        const fetchDepts = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/departments`, { headers: { Authorization: `Bearer ${token()}` } });
+                if (res.ok) setDepartments(await res.json());
+            } catch (e) { console.error(e); }
+        };
+        fetchDepts();
+    }, []);
 
-        if (!isNaN(start) && !isNaN(end) && end >= start) {
-            for (let i = 0; i < Math.min(end - start + 1, 50); i++) {
-                const id = `${form.year}${form.dept}${start + i}`;
-                let email = '';
-                if (isTestMode && baseEmail) {
-                    const parts = baseEmail.split('@');
-                    email = parts.length === 2 ? `${parts[0]}+${id.toLowerCase()}@${parts[1]}` : 'Invalid Email';
-                } else {
-                    email = `${id.toLowerCase()}@iitrpr.ac.in`;
-                }
-                rows.push({ id, email });
-            }
-        }
-        setPreview(rows);
-    }, [form, isTestMode, baseEmail]);
+    const downloadTemplate = () => {
+        const deptMapping = departments.map(d => `${d.id}=${d.name} (${d.code})`).join(', ');
+        const headers = ['email', 'entry_number', 'name', 'role', 'batch', 'department_id'];
+        const sampleRows = [
+            ['student1@iitrpr.ac.in', '2026CSB001', 'John Doe', 'student', '2026', departments[0]?.id || ''],
+            ['professor1@iitrpr.ac.in', '', 'Dr. Jane Smith', 'professor', '', departments[0]?.id || ''],
+            ['student2@iitrpr.ac.in', '2026CSB002', 'Alice Johnson', 'student', '2026', departments[0]?.id || ''],
+        ];
+        const csvContent = [
+            headers.join(','),
+            `# Department ID Mapping: ${deptMapping || 'See admin dashboard for IDs'}`,
+            ...sampleRows.map(row => row.join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'users-bulk-template.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const lines = event.target.result.split(/\r\n|\n/).filter(line => line.trim() && !line.startsWith('#'));
+            const rows = lines.slice(1).map((line, i) => {
+                const [email, entry_number, name, role, batch, department_id] = line.split(',');
+                return {
+                    email: email?.trim(),
+                    entry_number: entry_number?.trim() || null,
+                    name: name?.trim(),
+                    role: role?.trim(),
+                    batch: batch?.trim() || null,
+                    department_id: department_id?.trim() || null,
+                    id: i
+                };
+            }).filter(r => r.email && r.role && ['student', 'professor'].includes(r.role));
+            setParsedData(rows);
+            setStep('preview');
+        };
+        reader.readAsText(file);
+    };
 
     const handleSubmit = () => {
-        const list = [];
-        for (let i = parseInt(form.start); i <= parseInt(form.end); i++) {
-            const id = `${form.year}${form.dept}${i}`;
-            let email = '';
-            if (isTestMode && baseEmail) {
-                const parts = baseEmail.split('@');
-                email = `${parts[0]}+${id.toLowerCase()}@${parts[1]}`;
-            } else {
-                email = `${id.toLowerCase()}@iitrpr.ac.in`;
-            }
-            list.push({ entry_number: id, email });
-        }
-        onSubmit(list);
+        onSubmit(parsedData);
+    };
+
+    const getDeptName = (id) => {
+        const dept = departments.find(d => d.id === id);
+        return dept ? `${dept.name} (${dept.code})` : id;
     };
 
     return createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
-            <AdminCard className="w-[95%] max-w-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <AdminCard className="w-[95%] max-w-4xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-bold flex items-center gap-2">
-                        <Layers className="text-[rgb(var(--primary))]" /> Bulk Generator
+                        <Layers className="text-[rgb(var(--primary))]" /> Bulk User Registration
                     </h2>
                     <button onClick={onClose}><X size={20} className="text-[rgb(var(--muted))]" /></button>
                 </div>
 
-                <div className="grid grid-cols-4 gap-3 mb-6">
-                    <AdminInput label="Year" value={form.year} onChange={e => setForm({ ...form, year: e.target.value })} />
-                    <AdminInput label="Dept" value={form.dept} onChange={e => setForm({ ...form, dept: e.target.value.toUpperCase() })} />
-                    <AdminInput label="Start" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} />
-                    <AdminInput label="End" value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} />
-                </div>
-
-                <div className={`mb-6 p-4 rounded-xl border-2 transition-colors ${isTestMode ? 'bg-[rgb(var(--primary))]/5 border-[rgb(var(--primary))]/20' : 'bg-[rgb(var(--bg))] border-[rgb(var(--border))]'}`}>
-                    <label className="flex items-center gap-3 cursor-pointer select-none mb-3">
-                        <input
-                            type="checkbox"
-                            checked={isTestMode}
-                            onChange={e => setIsTestMode(e.target.checked)}
-                            className="w-5 h-5 accent-[rgb(var(--primary))]"
-                        />
-                        <span className={`font-bold text-sm flex items-center gap-2 ${isTestMode ? 'text-[rgb(var(--primary))]' : 'text-[rgb(var(--text))]'}`}>
-                            <FlaskConical size={18} /> Enable Test Mode (Email Aliasing)
-                        </span>
-                    </label>
-
-                    {isTestMode && (
-                        <div className="animate-in slide-in-from-top-2">
-                            <AdminInput
-                                label="Base Testing Email"
-                                placeholder="e.g. admin@gmail.com"
-                                value={baseEmail}
-                                onChange={e => setBaseEmail(e.target.value)}
-                                autoFocus
-                            />
-                            <p className="text-xs text-[rgb(var(--muted))] mt-2 font-mono">
-                                Example output: <span className="text-[rgb(var(--primary))]">{baseEmail.split('@')[0]}+{form.year}{form.dept}{form.start}@{baseEmail.split('@')[1] || '...'}</span>
-                            </p>
+                {/* Department Reference */}
+                {step === 'upload' && (
+                    <div className="mb-6 p-4 rounded-xl bg-[rgb(var(--primary))]/5 border border-[rgb(var(--primary))]/20">
+                        <h3 className="font-bold text-sm text-[rgb(var(--primary))] mb-3">Department ID Mapping:</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            {departments.length === 0 ? (
+                                <span className="text-xs text-[rgb(var(--muted))]">No departments available</span>
+                            ) : (
+                                departments.map(d => (
+                                    <div key={d.id} className="text-xs text-[rgb(var(--text))] font-mono bg-[rgb(var(--bg))] p-2 rounded">
+                                        <span className="font-bold text-[rgb(var(--primary))]">{d.id}</span> = {d.name} ({d.code})
+                                    </div>
+                                ))
+                            )}
                         </div>
-                    )}
-                </div>
-
-                <div className="mb-6 rounded-xl bg-[rgb(var(--bg))] border-2 border-[rgb(var(--border))] overflow-hidden h-48">
-                    <div className="p-3 bg-[rgb(var(--bg))] border-b border-[rgb(var(--border))] flex justify-between items-center">
-                        <span className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Preview Output</span>
-                        <span className="text-xs font-bold text-[rgb(var(--primary))]">{preview.length} Users</span>
                     </div>
-                    <div className="overflow-y-auto h-full p-2 pb-12 space-y-1">
-                        {preview.map((p, i) => (
-                            <div key={i} className="flex text-xs font-mono p-1 hover:bg-[rgb(var(--surface))] rounded">
-                                <span className="w-32 font-bold text-[rgb(var(--text))]">{p.id}</span>
-                                <span className="text-[rgb(var(--muted))]">{p.email}</span>
+                )}
+
+                {step === 'upload' ? (
+                    <div className="space-y-4">
+                        <AdminButton onClick={downloadTemplate} variant="secondary" className="w-full">
+                            <Download size={20} /> Download CSV Template
+                        </AdminButton>
+
+                        <div
+                            className="p-12 text-center border-2 border-dashed border-[rgb(var(--border))] rounded-2xl cursor-pointer hover:bg-[rgb(var(--bg))] transition-colors group"
+                            onClick={() => fileInputRef.current.click()}
+                        >
+                            <div className="w-12 h-12 bg-[rgb(var(--bg))] rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-[rgb(var(--primary))]/10 transition-colors">
+                                <Upload className="text-[rgb(var(--muted))] group-hover:text-[rgb(var(--primary))]" />
                             </div>
-                        ))}
-                        {preview.length === 0 && <div className="p-8 text-center text-[rgb(var(--muted))] text-sm">Invalid range configuration.</div>}
+                            <p className="font-bold text-[rgb(var(--text))]">Click to Upload CSV</p>
+                            <p className="text-xs text-[rgb(var(--muted))] mt-1">Required columns: email, entry_number, name, role, batch, department_id</p>
+                            <input type="file" hidden ref={fileInputRef} accept=".csv" onChange={handleFileUpload} />
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="space-y-4">
+                        <div className="bg-[rgb(var(--primary))]/10 p-3 rounded-lg text-xs text-[rgb(var(--primary))] font-bold text-center border border-[rgb(var(--primary))]/20">
+                            Previewing {parsedData.length} users for bulk registration
+                        </div>
 
-                <div className="flex gap-3 pt-4 border-t border-[rgb(var(--border))]">
-                    <AdminButton variant="secondary" onClick={onClose}>Cancel</AdminButton>
-                    <AdminButton
-                        loading={loading}
-                        onClick={handleSubmit}
-                        disabled={preview.length === 0 || (isTestMode && !baseEmail.includes('@'))}
-                    >
-                        Generate & Add Users
-                    </AdminButton>
-                </div>
+                        <div className="max-h-96 overflow-x-auto border border-[rgb(var(--border))] rounded-xl bg-[rgb(var(--bg))]">
+                            <table className="w-full text-xs">
+                                <thead className="bg-[rgb(var(--surface))] sticky top-0 border-b border-[rgb(var(--border))]">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left font-bold text-[rgb(var(--muted))]">Email</th>
+                                        <th className="px-4 py-2 text-left font-bold text-[rgb(var(--muted))]">Name</th>
+                                        <th className="px-4 py-2 text-left font-bold text-[rgb(var(--muted))]">Role</th>
+                                        <th className="px-4 py-2 text-left font-bold text-[rgb(var(--muted))]">Entry No.</th>
+                                        <th className="px-4 py-2 text-left font-bold text-[rgb(var(--muted))]">Batch</th>
+                                        <th className="px-4 py-2 text-left font-bold text-[rgb(var(--muted))]">Department</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[rgb(var(--border))]">
+                                    {parsedData.map((row, i) => (
+                                        <tr key={i} className="hover:bg-[rgb(var(--surface))]">
+                                            <td className="px-4 py-2 text-[rgb(var(--text))]">{row.email}</td>
+                                            <td className="px-4 py-2 text-[rgb(var(--text))]">{row.name || '-'}</td>
+                                            <td className="px-4 py-2"><span className={`text-xs font-bold px-2 py-1 rounded ${row.role === 'professor' ? 'bg-[rgb(var(--primary))]/10 text-[rgb(var(--primary))]' : 'bg-[rgb(var(--bg))] text-[rgb(var(--muted))]'}`}>{row.role}</span></td>
+                                            <td className="px-4 py-2 font-mono text-[rgb(var(--muted))]">{row.entry_number || '-'}</td>
+                                            <td className="px-4 py-2 text-[rgb(var(--muted))]">{row.batch || '-'}</td>
+                                            <td className="px-4 py-2 text-[rgb(var(--muted))] text-xs">{row.department_id ? getDeptName(row.department_id) : '-'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="flex gap-3 pt-4 border-t border-[rgb(var(--border))]">
+                            <AdminButton variant="secondary" onClick={() => setStep('upload')}>Back</AdminButton>
+                            <AdminButton
+                                loading={loading}
+                                onClick={handleSubmit}
+                                disabled={parsedData.length === 0}
+                            >
+                                Import {parsedData.length} Users
+                            </AdminButton>
+                        </div>
+                    </div>
+                )}
             </AdminCard>
         </div>,
         document.body

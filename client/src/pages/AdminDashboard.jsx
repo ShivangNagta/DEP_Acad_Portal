@@ -3,7 +3,7 @@ import {
     Users, BookOpen, ScrollText, Settings, ArrowRight,
     CheckCircle, Loader2, GraduationCap, Scale,
     Save, ListFilter, RefreshCw, Activity, Trash2,
-    Check, X, FileCheck
+    Check, X, FileCheck, Clock
 } from 'lucide-react';
 
 import DashboardLayout from '../components/DashboardLayout';
@@ -208,7 +208,8 @@ const CourseManager = ({ onCountChange }) => {
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState('pending');
     const [actionLoading, setActionLoading] = useState(null);
-    const CURRENT_SESSION = '2025-2026';
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedRows, setSelectedRows] = useState(new Set());
     const token = localStorage.getItem('access_token');
 
     useEffect(() => { fetchCourses(); }, []);
@@ -233,77 +234,186 @@ const CourseManager = ({ onCountChange }) => {
                 body: JSON.stringify({ status })
             });
             fetchCourses();
+            setSelectedRows(new Set());
         } catch (e) { alert('Failed'); } finally { setActionLoading(null); }
+    };
+
+    const handleBulkAction = async (status) => {
+        if (selectedRows.size === 0) return;
+        setActionLoading('bulk');
+        try {
+            await Promise.all(Array.from(selectedRows).map(id =>
+                fetch(`${API_BASE}/courses/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ status })
+                })
+            ));
+            fetchCourses();
+            setSelectedRows(new Set());
+        } catch (e) { alert('Bulk action failed'); } finally { setActionLoading(null); }
+    };
+
+    const filteredCourses = (view === 'pending' ? courses.filter(c => c.status === 'pending') : courses).filter(c =>
+        c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.course_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.instructor?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.instructor?.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const toggleRow = (id) => {
+        const newSet = new Set(selectedRows);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedRows(newSet);
+    };
+
+    const toggleAllRows = () => {
+        if (selectedRows.size === filteredCourses.length) setSelectedRows(new Set());
+        else setSelectedRows(new Set(filteredCourses.map(c => c.id)));
     };
 
     const pendingCourses = courses.filter(c => c.status === 'pending');
 
     return (
         <div className="space-y-6">
-            <div className="flex bg-[rgb(var(--surface))] p-1.5 rounded-xl border border-[rgb(var(--border))] w-fit shadow-sm">
-                {['pending', 'all'].map(v => (
-                    <button
-                        key={v}
-                        onClick={() => setView(v)}
-                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${view === v
-                                ? 'bg-[rgb(var(--primary))] text-[rgb(var(--surface))] shadow-md'
-                                : 'text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]'
-                            }`}
-                    >
-                        {v === 'pending' ? `Requests (${pendingCourses.length})` : 'All Courses'}
-                    </button>
-                ))}
-            </div>
-
-            {loading ? <div className="p-12 text-center text-[rgb(var(--muted))]"><Loader2 className="animate-spin mx-auto" /></div> : view === 'pending' ? (
-                <div className="space-y-4">
-                    {pendingCourses.length === 0 && (
-                        <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-[rgb(var(--border))] rounded-2xl bg-[rgb(var(--bg))]/50">
-                            <CheckCircle size={48} className="text-green-500/50 mb-4" />
-                            <h3 className="text-lg font-bold text-[rgb(var(--text))]">All Caught Up</h3>
-                        </div>
-                    )}
-                    {pendingCourses.map(c => (
-                        <AdminCard key={c.id} className="flex justify-between items-center hover:border-[rgb(var(--primary))]/30 transition-colors">
-                            <div>
-                                <h3 className="font-bold text-lg text-[rgb(var(--text))]">{c.title}</h3>
-                                <p className="text-sm text-[rgb(var(--muted))] font-mono mt-1">{c.course_code} • {c.instructor?.email}</p>
-                            </div>
-                            <div className="flex gap-3">
-                                <AdminButton variant="danger" onClick={() => handleUpdate(c.id, 'rejected')} disabled={actionLoading === c.id}>Reject</AdminButton>
-                                <AdminButton variant="primary" onClick={() => handleUpdate(c.id, 'approved')} disabled={actionLoading === c.id}>Approve</AdminButton>
-                            </div>
-                        </AdminCard>
+            <div className="flex gap-3 items-center flex-wrap">
+                <div className="flex bg-[rgb(var(--surface))] p-1.5 rounded-xl border border-[rgb(var(--border))] w-fit shadow-sm">
+                    {['pending', 'all'].map(v => (
+                        <button
+                            key={v}
+                            onClick={() => { setView(v); setSearchTerm(''); setSelectedRows(new Set()); }}
+                            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${view === v
+                                    ? 'bg-[rgb(var(--primary))] text-[rgb(var(--surface))] shadow-md'
+                                    : 'text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]'
+                                }`}
+                        >
+                            {v === 'pending' ? `Requests (${pendingCourses.length})` : 'All Courses'}
+                        </button>
                     ))}
                 </div>
-            ) : (
-                <AdminCard className="overflow-hidden p-0">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-[rgb(var(--bg))] text-[rgb(var(--muted))] font-bold text-xs uppercase">
-                            <tr>
-                                <th className="px-6 py-4">Course</th>
-                                <th className="px-6 py-4">Session</th>
-                                <th className="px-6 py-4">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[rgb(var(--border))]">
-                            {courses.map(c => (
-                                <tr key={c.id} className="hover:bg-[rgb(var(--bg))] transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="font-bold text-[rgb(var(--text))]">{c.title}</div>
-                                        <div className="text-xs text-[rgb(var(--muted))]">{c.course_code}</div>
-                                    </td>
-                                    <td className="px-6 py-4 text-[rgb(var(--muted))]">{c.academic_session}</td>
-                                    <td className="px-6 py-4">
-                                        <AdminBadge variant={c.status === 'approved' ? 'success' : c.status === 'rejected' ? 'danger' : 'warning'}>
-                                            {c.status}
-                                        </AdminBadge>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </AdminCard>
+
+                {selectedRows.size > 0 && view === 'pending' && (
+                    <div className="flex gap-2 ml-auto">
+                        <span className="text-xs font-bold text-[rgb(var(--muted))] self-center">{selectedRows.size} selected</span>
+                        <AdminButton variant="danger" onClick={() => handleBulkAction('rejected')} disabled={actionLoading === 'bulk'} className="px-3">Reject ({selectedRows.size})</AdminButton>
+                        <AdminButton variant="primary" onClick={() => handleBulkAction('approved')} disabled={actionLoading === 'bulk'} className="px-3">Approve ({selectedRows.size})</AdminButton>
+                    </div>
+                )}
+            </div>
+
+            {loading ? <div className="p-12 text-center text-[rgb(var(--muted))]"><Loader2 className="animate-spin mx-auto" /></div> : (
+                <>
+                    {view === 'pending' ? (
+                        <div className="space-y-4">
+                            {pendingCourses.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-[rgb(var(--border))] rounded-2xl bg-[rgb(var(--bg))]/50">
+                                    <CheckCircle size={48} className="text-green-500/50 mb-4" />
+                                    <h3 className="text-lg font-bold text-[rgb(var(--text))]">All Caught Up</h3>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Search courses..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="flex-1 px-4 py-2 rounded-xl bg-[rgb(var(--bg))] border-2 border-[rgb(var(--border))] text-[rgb(var(--text))] text-sm outline-none focus:border-[rgb(var(--primary))]"
+                                        />
+                                    </div>
+                                    {filteredCourses.map(c => (
+                                        <AdminCard key={c.id} className={`flex items-center gap-4 hover:border-[rgb(var(--primary))]/30 transition-all ${selectedRows.has(c.id) ? 'bg-[rgb(var(--primary))]/5 border-[rgb(var(--primary))]/30' : ''}`}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedRows.has(c.id)}
+                                                onChange={() => toggleRow(c.id)}
+                                                className="w-5 h-5 accent-[rgb(var(--primary))] cursor-pointer"
+                                            />
+                                            <div className="flex-1">
+                                                <h3 className="font-bold text-lg text-[rgb(var(--text))]">{c.title}</h3>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2 text-xs text-[rgb(var(--muted))]">
+                                                    <div><span className="font-bold text-[rgb(var(--text))]">Code:</span> {c.course_code}</div>
+                                                    <div><span className="font-bold text-[rgb(var(--text))]">Instructor:</span> {c.instructor?.name || c.instructor?.email}</div>
+                                                    <div><span className="font-bold text-[rgb(var(--text))]">Dept:</span> {c.instructor?.departments?.name || '-'}</div>
+                                                    <div><span className="font-bold text-[rgb(var(--text))]">Session:</span> {c.academic_session}</div>
+                                                </div>
+                                                <div className="mt-2 text-xs font-mono text-[rgb(var(--muted))]">Credits: {c.credits || '0'}</div>
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <AdminButton variant="danger" onClick={() => handleUpdate(c.id, 'rejected')} disabled={actionLoading === c.id}>Reject</AdminButton>
+                                                <AdminButton variant="primary" onClick={() => handleUpdate(c.id, 'approved')} disabled={actionLoading === c.id}>Approve</AdminButton>
+                                            </div>
+                                        </AdminCard>
+                                    ))}
+                                </>
+                            )}
+                        </div>
+                    ) : (
+                        <AdminCard className="overflow-hidden p-0">
+                            <div className="p-4 border-b border-[rgb(var(--border))] bg-[rgb(var(--bg))]/50">
+                                <input
+                                    type="text"
+                                    placeholder="Search courses..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full px-4 py-2 rounded-xl bg-[rgb(var(--bg))] border-2 border-[rgb(var(--border))] text-[rgb(var(--text))] text-sm outline-none focus:border-[rgb(var(--primary))]"
+                                />
+                            </div>
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-[rgb(var(--bg))] text-[rgb(var(--muted))] font-bold text-xs uppercase border-b border-[rgb(var(--border))]">
+                                    <tr>
+                                        <th className="px-6 py-4">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedRows.size === filteredCourses.length && filteredCourses.length > 0}
+                                                onChange={toggleAllRows}
+                                                className="w-4 h-4 accent-[rgb(var(--primary))] cursor-pointer"
+                                            />
+                                        </th>
+                                        <th className="px-6 py-4">Course</th>
+                                        <th className="px-6 py-4">Instructor</th>
+                                        <th className="px-6 py-4">Department</th>
+                                        <th className="px-6 py-4">Session</th>
+                                        <th className="px-6 py-4">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[rgb(var(--border))]">
+                                    {filteredCourses.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="6" className="p-8 text-center text-[rgb(var(--muted))]">No courses found</td>
+                                        </tr>
+                                    ) : (
+                                        filteredCourses.map(c => (
+                                            <tr key={c.id} className={`hover:bg-[rgb(var(--bg))] transition-colors ${selectedRows.has(c.id) ? 'bg-[rgb(var(--primary))]/5' : ''}`}>
+                                                <td className="px-6 py-4">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedRows.has(c.id)}
+                                                        onChange={() => toggleRow(c.id)}
+                                                        className="w-4 h-4 accent-[rgb(var(--primary))] cursor-pointer"
+                                                    />
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-bold text-[rgb(var(--text))]">{c.title}</div>
+                                                    <div className="text-xs text-[rgb(var(--muted))]">{c.course_code}</div>
+                                                </td>
+                                                <td className="px-6 py-4 text-[rgb(var(--text))]">{c.instructor?.name || c.instructor?.email || '-'}</td>
+                                                <td className="px-6 py-4 text-[rgb(var(--muted))]">{c.instructor?.departments?.name || '-'}</td>
+                                                <td className="px-6 py-4 text-[rgb(var(--muted))]">{c.academic_session}</td>
+                                                <td className="px-6 py-4">
+                                                    <AdminBadge variant={c.status === 'approved' ? 'success' : c.status === 'rejected' ? 'danger' : 'warning'}>
+                                                        {c.status}
+                                                    </AdminBadge>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </AdminCard>
+                    )}
+                </>
             )}
         </div>
     );
@@ -317,6 +427,92 @@ const SystemSettings = () => {
     const [policy, setPolicy] = useState('absolute');
     const [loading, setLoading] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [enrollmentDeadline, setEnrollmentDeadline] = useState('');
+    const [deadlineLoading, setDeadlineLoading] = useState(false);
+    const [deadlineSaved, setDeadlineSaved] = useState(false);
+    const token = localStorage.getItem('access_token');
+
+    // Debug log
+    useEffect(() => {
+        console.log('AdminDashboard initialized:', {
+            API_BASE,
+            token: !!token,
+            endpoint: `${API_BASE}/admin/enrollment-deadline`
+        });
+    }, []);
+
+    // Fetch current deadline on component mount
+    useEffect(() => {
+        const fetchDeadline = async () => {
+            if (!token) {
+                console.error('No auth token found');
+                return;
+            }
+            const url = `${API_BASE}/admin/enrollment-deadline`;
+            console.log('Fetching deadline from:', url);
+            try {
+                const res = await fetch(url, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (!res.ok) {
+                    console.error(`Failed to fetch deadline: ${res.status} ${res.statusText}`);
+                    const errorData = await res.json().catch(() => ({}));
+                    console.error('Error response:', errorData);
+                    return;
+                }
+                const data = await res.json();
+                console.log('Deadline fetched:', data);
+                if (data.deadline) {
+                    // Convert to ISO date string (YYYY-MM-DD)
+                    const date = new Date(data.deadline);
+                    setEnrollmentDeadline(date.toISOString().split('T')[0]);
+                }
+            } catch (e) {
+                console.error('Failed to fetch deadline:', e);
+            }
+        };
+        fetchDeadline();
+    }, [token]);
+
+    const handleSaveDeadline = async () => {
+        if (!enrollmentDeadline) {
+            alert('Please select a date');
+            return;
+        }
+
+        setDeadlineLoading(true);
+        const url = `${API_BASE}/admin/enrollment-deadline`;
+        console.log('Saving deadline to:', url, { deadline: enrollmentDeadline, token: !!token });
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}` 
+                },
+                body: JSON.stringify({ deadline: enrollmentDeadline })
+            });
+            
+            console.log('Save response status:', res.status, res.statusText);
+            
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                console.error(`Save failed: ${res.status} ${res.statusText}`, errorData);
+                alert(`Failed to save deadline: ${errorData.error || res.statusText}`);
+                return;
+            }
+            
+            const data = await res.json();
+            console.log('Deadline saved successfully:', data);
+            setDeadlineSaved(true);
+            setTimeout(() => setDeadlineSaved(false), 3000);
+        } catch (e) {
+            console.error('Error saving deadline:', e);
+            alert('Error saving deadline: ' + e.message);
+        } finally {
+            setDeadlineLoading(false);
+        }
+    };
 
     const handleSave = () => {
         setLoading(true);
@@ -325,6 +521,49 @@ const SystemSettings = () => {
 
     return (
         <div className="max-w-4xl mx-auto space-y-8">
+            {/* ENROLLMENT DEADLINE SECTION */}
+            <div className="flex items-center gap-4 mb-8">
+                <div className="p-3 bg-[rgb(var(--primary))]/10 rounded-xl text-[rgb(var(--primary))]">
+                    <Clock size={32} />
+                </div>
+                <div>
+                    <h2 className="text-3xl font-bold text-[rgb(var(--text))]">Enrollment Management</h2>
+                    <p className="text-[rgb(var(--muted))] mt-1">Set deadlines for course enrollment and drops.</p>
+                </div>
+            </div>
+
+            <AdminCard>
+                <div className="flex items-center gap-3 mb-6">
+                    <Clock className="text-[rgb(var(--primary))]" />
+                    <h3 className="font-bold text-lg">Enrollment/Drop Deadline</h3>
+                </div>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-sm font-bold text-[rgb(var(--muted))] uppercase block mb-2">Select Deadline Date</label>
+                        <input
+                            type="date"
+                            value={enrollmentDeadline}
+                            onChange={(e) => setEnrollmentDeadline(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl bg-[rgb(var(--bg))] border-2 border-[rgb(var(--border))] text-[rgb(var(--text))] font-bold outline-none focus:border-[rgb(var(--primary))] focus:ring-2 focus:ring-[rgb(var(--primary))]/20 transition-all"
+                        />
+                        {enrollmentDeadline && (
+                            <p className="text-xs text-[rgb(var(--muted))] mt-2 font-mono">
+                                Deadline: {new Date(enrollmentDeadline + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                            </p>
+                        )}
+                    </div>
+                </div>
+                <div className="mt-6 pt-6 border-t border-[rgb(var(--border))] flex justify-between items-center">
+                    <span className="text-green-600 font-bold text-sm flex items-center gap-2">
+                        {deadlineSaved && <><CheckCircle size={16} /> Saved Successfully</>}
+                    </span>
+                    <AdminButton onClick={handleSaveDeadline} disabled={deadlineLoading}>
+                        <Save size={18} /> Save Deadline
+                    </AdminButton>
+                </div>
+            </AdminCard>
+
+            {/* GRADING CONFIGURATION SECTION */}
             <div className="flex items-center gap-4 mb-8">
                 <div className="p-3 bg-[rgb(var(--primary))]/10 rounded-xl text-[rgb(var(--primary))]">
                     <Scale size={32} />

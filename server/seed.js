@@ -88,7 +88,9 @@ async function createAdmin() {
                 id: userId,
                 email: adminEmail,
                 role: 'admin',
-                entry_number: null
+                entry_number: null,
+                batch: null,
+                department_id: null
             })
             .select()
             .single();

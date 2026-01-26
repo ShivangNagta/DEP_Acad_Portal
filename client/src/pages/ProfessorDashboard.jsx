@@ -5,7 +5,7 @@ import {
     BookOpen, Users, Upload, FileText, Plus, X,
     AlertCircle, CheckCircle2, Loader2, Check,
     Ban, Search, Globe, Archive, Clock, MoreHorizontal,
-    ChevronDown, ArrowRight, LayoutDashboard, FolderClock
+    ChevronDown, ArrowRight, LayoutDashboard, FolderClock, Filter, Download, MessageCircle, BarChart3
 } from 'lucide-react';
 
 import { API_BASE_URL } from '../config/api';
@@ -95,6 +95,7 @@ export default function ProfessorDashboard() {
     const [activeTab, setActiveTab] = useState('enrollments');
     const [enrollments, setEnrollments] = useState([]);
     const [grades, setGrades] = useState([]);
+    const [feedbackStats, setFeedbackStats] = useState([]);
 
     // UI State
     const [showCourseModal, setShowCourseModal] = useState(false);
@@ -102,11 +103,22 @@ export default function ProfessorDashboard() {
     const [loading, setLoading] = useState(false);
     const [feedback, setFeedback] = useState({ type: '', text: '' });
     const [sidebarSearch, setSidebarSearch] = useState('');
+    
+    // Filtering and row selection state
+    const [enrollmentSearchQuery, setEnrollmentSearchQuery] = useState('');
+    const [enrollmentFilterStatus, setEnrollmentFilterStatus] = useState('');
+    const [enrollmentShowAdvancedFilters, setEnrollmentShowAdvancedFilters] = useState(false);
+    const [selectedEnrollmentRows, setSelectedEnrollmentRows] = useState({});
+    const [gradeSearchQuery, setGradeSearchQuery] = useState('');
+    const [gradeFilterStatus, setGradeFilterStatus] = useState('');
+    const [gradeShowAdvancedFilters, setGradeShowAdvancedFilters] = useState(false);
+    const [selectedGradeRows, setSelectedGradeRows] = useState({});
 
     const token = localStorage.getItem('access_token');
 
     useEffect(() => {
         fetchMyCourses();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -114,6 +126,7 @@ export default function ProfessorDashboard() {
         setViewMode('manage');
         fetchEnrollments();
         fetchGrades();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedCourse]);
 
     const fetchMyCourses = async () => {
@@ -179,11 +192,11 @@ export default function ProfessorDashboard() {
             showMsg('success', 'Course proposed successfully.');
             setShowCourseModal(false);
             fetchMyCourses();
-        } catch (e) { showMsg('error', 'Failed to create course'); }
+        } catch (_e) { showMsg('error', 'Failed to create course'); } // eslint-disable-line no-unused-vars
         finally { setLoading(false); }
     };
 
-    const handleBulkGradeUpload = async (parsedRows) => {
+    const handleBulkGradeUpload = async (parsedRows, semester) => {
         setLoading(true);
         let successCount = 0;
         let failCount = 0;
@@ -209,17 +222,17 @@ export default function ProfessorDashboard() {
                             course_id: selectedCourse.id,
                             student_id: studentId,
                             marks,
-                            semester: 1
+                            semester: semester || 'sem-1'
                         })
                     });
                     if (res.ok) successCount++; else failCount++;
-                } catch (e) { failCount++; }
+                } catch (_e) { failCount++; } // eslint-disable-line no-unused-vars
             }));
 
             showMsg('success', `Updated ${successCount} grades. ${failCount > 0 ? `${failCount} failed.` : ''}`);
             setShowUploadModal(false);
             fetchGrades();
-        } catch (e) { showMsg('error', 'Upload process failed'); }
+        } catch (_e) { showMsg('error', 'Upload process failed'); } // eslint-disable-line no-unused-vars
         finally { setLoading(false); }
     };
 
@@ -248,6 +261,29 @@ export default function ProfessorDashboard() {
     });
 
     const displayCourses = sidebarTab === 'active' ? activeCourses : pastCourses;
+
+    // Filtered enrollments and grades based on search and filters
+    const filteredEnrollments = enrollments.filter(e => {
+        const matchesSearch = !enrollmentSearchQuery || 
+            e.student?.entry_number?.toLowerCase().includes(enrollmentSearchQuery.toLowerCase()) ||
+            e.student?.name?.toLowerCase().includes(enrollmentSearchQuery.toLowerCase()) ||
+            e.course?.title?.toLowerCase().includes(enrollmentSearchQuery.toLowerCase());
+        
+        const matchesStatus = !enrollmentFilterStatus || e.status === enrollmentFilterStatus;
+        
+        return matchesSearch && matchesStatus;
+    });
+
+    const filteredGrades = grades.filter(g => {
+        const matchesSearch = !gradeSearchQuery || 
+            g.student?.entry_number?.toLowerCase().includes(gradeSearchQuery.toLowerCase()) ||
+            g.student?.name?.toLowerCase().includes(gradeSearchQuery.toLowerCase()) ||
+            g.course?.title?.toLowerCase().includes(gradeSearchQuery.toLowerCase());
+        
+        const matchesStatus = !gradeFilterStatus || (gradeFilterStatus === 'published' ? g.status === 'published' : g.status !== 'published');
+        
+        return matchesSearch && matchesStatus;
+    });
 
     return (
         <DashboardLayout
@@ -365,26 +401,51 @@ export default function ProfessorDashboard() {
                         <div className="flex bg-[rgb(var(--bg))] p-1 rounded-xl border border-[rgb(var(--border))]">
                             <TabButton active={activeTab === 'enrollments'} onClick={() => setActiveTab('enrollments')} icon={Users}>Enrollments</TabButton>
                             <TabButton active={activeTab === 'grades'} onClick={() => setActiveTab('grades')} icon={FileText}>Grades</TabButton>
+                            <TabButton active={activeTab === 'feedback'} onClick={() => setActiveTab('feedback')} icon={BarChart3}>Feedback</TabButton>
                         </div>
                     </PortalCard>
 
                     {activeTab === 'enrollments' ? (
-                        <EnrollmentManager enrollments={enrollments} token={token} onUpdate={fetchEnrollments} />
-                    ) : (
+                        <EnrollmentManager 
+                            enrollments={enrollments} 
+                            filteredEnrollments={filteredEnrollments}
+                            token={token} 
+                            onUpdate={fetchEnrollments}
+                            searchQuery={enrollmentSearchQuery}
+                            onSearchChange={setEnrollmentSearchQuery}
+                            filterStatus={enrollmentFilterStatus}
+                            onFilterStatusChange={setEnrollmentFilterStatus}
+                            showAdvancedFilters={enrollmentShowAdvancedFilters}
+                            onToggleAdvancedFilters={() => setEnrollmentShowAdvancedFilters(!enrollmentShowAdvancedFilters)}
+                            selectedRows={selectedEnrollmentRows}
+                            onSelectedRowsChange={setSelectedEnrollmentRows}
+                        />
+                    ) : activeTab === 'grades' ? (
                         <GradeManager
                             grades={grades}
+                            filteredGrades={filteredGrades}
                             enrollments={enrollments}
                             onUpload={() => setShowUploadModal(true)}
                             courseId={selectedCourse.id}
                             token={token}
                             semester={1}
+                            searchQuery={gradeSearchQuery}
+                            onSearchChange={setGradeSearchQuery}
+                            filterStatus={gradeFilterStatus}
+                            onFilterStatusChange={setGradeFilterStatus}
+                            showAdvancedFilters={gradeShowAdvancedFilters}
+                            onToggleAdvancedFilters={() => setGradeShowAdvancedFilters(!gradeShowAdvancedFilters)}
+                            selectedRows={selectedGradeRows}
+                            onSelectedRowsChange={setSelectedGradeRows}
                         />
+                    ) : (
+                        <FeedbackStats courseId={selectedCourse.id} token={token} />
                     )}
                 </div>
             )}
 
             {showCourseModal && <CourseModal onClose={() => setShowCourseModal(false)} onSubmit={handleCreateCourse} loading={loading} />}
-            {showUploadModal && <CSVUploadModal onClose={() => setShowUploadModal(false)} onSubmit={handleBulkGradeUpload} loading={loading} />}
+            {showUploadModal && <CSVUploadModal onClose={() => setShowUploadModal(false)} onSubmit={handleBulkGradeUpload} loading={loading} enrollments={enrollments} courseName={selectedCourse?.title || ''} />}
         </DashboardLayout>
     );
 }
@@ -393,9 +454,176 @@ export default function ProfessorDashboard() {
 /* SUB-COMPONENTS
 /* -------------------------------------------------------------------------- */
 
+const FeedbackStats = ({ courseId, token }) => {
+    const [stats, setStats] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [selectedSemester, setSelectedSemester] = useState('mid');
+
+    useEffect(() => {
+        fetchFeedbackStats();
+    }, [courseId, selectedSemester]);
+
+    const fetchFeedbackStats = async () => {
+        try {
+            setLoading(true);
+            const res = await fetch(`${API_BASE}/feedback/stats?course_id=${courseId}&semester=${selectedSemester}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setStats(data);
+                setError('');
+            } else {
+                setError('Failed to load feedback statistics');
+            }
+        } catch (e) {
+            setError('Error loading feedback');
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-96">
+                <Loader2 className="animate-spin text-[rgb(var(--primary))]" size={32} />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <PortalCard className="flex items-center gap-4 bg-red-50 border-red-200">
+                <AlertCircle className="text-red-600" size={24} />
+                <div className="flex-1">
+                    <p className="text-sm font-bold text-red-900">{error}</p>
+                </div>
+                <PortalButton variant="ghost" onClick={fetchFeedbackStats}>Retry</PortalButton>
+            </PortalCard>
+        );
+    }
+
+    if (stats.length === 0) {
+        return (
+            <PortalCard className="text-center py-12">
+                <MessageCircle size={48} className="mx-auto text-[rgb(var(--muted))] mb-4 opacity-50" />
+                <p className="text-[rgb(var(--muted))] font-semibold">No feedback received yet</p>
+                <p className="text-sm text-[rgb(var(--muted))]/70 mt-1">Students' feedback will appear here once submitted</p>
+            </PortalCard>
+        );
+    }
+
+    const responseLables = {
+        1: 'Strongly Disagree',
+        2: 'Disagree',
+        3: 'Neutral',
+        4: 'Agree',
+        5: 'Strongly Agree'
+    };
+
+    const getResponseColor = (rating) => {
+        const colors = {
+            1: 'bg-red-100 text-red-900',
+            2: 'bg-orange-100 text-orange-900',
+            3: 'bg-yellow-100 text-yellow-900',
+            4: 'bg-blue-100 text-blue-900',
+            5: 'bg-green-100 text-green-900'
+        };
+        return colors[rating] || 'bg-gray-100 text-gray-900';
+    };
+
+    return (
+        <div className="space-y-6">
+            <PortalCard className="flex gap-3">
+                <div className="flex-1">
+                    <p className="text-xs uppercase tracking-wide font-bold text-[rgb(var(--muted))] mb-2">View Feedback</p>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setSelectedSemester('mid')}
+                            className={`flex-1 py-2.5 px-3 rounded-lg font-bold transition-all ${
+                                selectedSemester === 'mid'
+                                    ? 'bg-[rgb(var(--primary))] text-[rgb(var(--surface))]'
+                                    : 'bg-[rgb(var(--bg))] border border-[rgb(var(--border))] text-[rgb(var(--text))]'
+                            }`}
+                        >
+                            Mid Semester
+                        </button>
+                        <button
+                            onClick={() => setSelectedSemester('end')}
+                            className={`flex-1 py-2.5 px-3 rounded-lg font-bold transition-all ${
+                                selectedSemester === 'end'
+                                    ? 'bg-[rgb(var(--primary))] text-[rgb(var(--surface))]'
+                                    : 'bg-[rgb(var(--bg))] border border-[rgb(var(--border))] text-[rgb(var(--text))]'
+                            }`}
+                        >
+                            End Semester
+                        </button>
+                    </div>
+                </div>
+            </PortalCard>
+
+            {stats.map((question, idx) => {
+                const responses = question.responses || {};
+                const totalResponses = question.total_responses || 0;
+                const avgRating = totalResponses > 0 
+                    ? ((1 * (responses['1'] || 0) + 2 * (responses['2'] || 0) + 3 * (responses['3'] || 0) + 4 * (responses['4'] || 0) + 5 * (responses['5'] || 0)) / totalResponses).toFixed(2)
+                    : 0;
+
+                return (
+                    <PortalCard key={idx} className="space-y-4">
+                        <div className="flex justify-between items-start gap-4">
+                            <div className="flex-1">
+                                <h3 className="text-base font-bold text-[rgb(var(--text))]">
+                                    Q{idx + 1}. {question.question_text}
+                                </h3>
+                                <p className="text-xs text-[rgb(var(--muted))] mt-1">
+                                    {totalResponses} {totalResponses === 1 ? 'response' : 'responses'} • Average rating: <span className="font-bold text-[rgb(var(--primary))]">{avgRating}/5</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-5 gap-2">
+                            {[1, 2, 3, 4, 5].map(rating => {
+                                const count = responses[rating.toString()] || 0;
+                                const percentage = totalResponses > 0 ? ((count / totalResponses) * 100).toFixed(1) : 0;
+                                
+                                return (
+                                    <div key={rating} className="space-y-2">
+                                        <div className="relative h-32 bg-[rgb(var(--bg))] rounded-lg border border-[rgb(var(--border))] overflow-hidden">
+                                            <div 
+                                                className={`absolute bottom-0 left-0 right-0 transition-all duration-300 ${getResponseColor(rating)}`}
+                                                style={{ height: totalResponses > 0 ? `${(count / Math.max(...Object.values(responses).map(v => v || 0))) * 100}%` : '0%' }}
+                                            />
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <span className="text-sm font-bold text-[rgb(var(--text))]">{count}</span>
+                                            </div>
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-xs font-bold text-[rgb(var(--text))]">{rating}</p>
+                                            <p className="text-[10px] text-[rgb(var(--muted))] leading-tight">{responseLables[rating]}</p>
+                                            <p className="text-[10px] font-semibold text-[rgb(var(--primary))]">{percentage}%</p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </PortalCard>
+                );
+            })}
+        </div>
+    );
+};
+
 const DirectoryView = ({ courses, loading }) => {
     const [filter, setFilter] = useState('');
-    const filtered = courses.filter(c => c.title.toLowerCase().includes(filter.toLowerCase()) || c.department.toLowerCase().includes(filter.toLowerCase()));
+    const filtered = courses.filter(c => 
+        c.title.toLowerCase().includes(filter.toLowerCase()) || 
+        c.course_code.toLowerCase().includes(filter.toLowerCase()) ||
+        c.instructor?.name?.toLowerCase().includes(filter.toLowerCase()) ||
+        c.instructor?.departments?.name?.toLowerCase().includes(filter.toLowerCase())
+    );
 
     if (loading) return <div className="p-10 text-center text-[rgb(var(--muted))]"><Loader2 className="animate-spin mx-auto mb-2" /> Loading Directory...</div>;
 
@@ -435,8 +663,11 @@ const DirectoryView = ({ courses, loading }) => {
                                     <div className="font-bold text-[rgb(var(--text))]">{c.title}</div>
                                     <div className="text-xs text-[rgb(var(--muted))] font-mono mt-0.5">{c.course_code} • {c.credits} Credits</div>
                                 </td>
-                                <td className="px-6 py-4 font-bold text-xs uppercase">{c.department}</td>
-                                <td className="px-6 py-4 text-[rgb(var(--muted))] text-xs font-mono">{c.instructor?.email}</td>
+                                <td className="px-6 py-4 font-bold text-xs uppercase">{c.instructor?.departments?.name || 'N/A'}</td>
+                                <td className="px-6 py-4 text-[rgb(var(--muted))] text-xs">
+                                    <div className="font-medium text-[rgb(var(--text))]">{c.instructor?.name || 'N/A'}</div>
+                                    <div className="font-mono text-[rgb(var(--muted))]">{c.instructor?.entry_number || 'N/A'}</div>
+                                </td>
                                 <td className="px-6 py-4"><PortalBadge variant="neutral">{c.academic_session || 'N/A'}</PortalBadge></td>
                             </tr>
                         ))}
@@ -448,7 +679,7 @@ const DirectoryView = ({ courses, loading }) => {
     );
 };
 
-const GradeManager = ({ grades, enrollments, onUpload, courseId, token }) => {
+const GradeManager = ({ filteredGrades, enrollments, onUpload, courseId, token, searchQuery, onSearchChange, filterStatus, onFilterStatusChange, showAdvancedFilters, onToggleAdvancedFilters, selectedRows, onSelectedRowsChange }) => {
     const updateSingle = async (student_id, marks) => {
         try {
             await fetch(`${API_BASE}/grades`, {
@@ -467,7 +698,7 @@ const GradeManager = ({ grades, enrollments, onUpload, courseId, token }) => {
     const validStudents = enrollments.filter(e => e.status === 'approved' || e.status === 'completed');
 
     const tableData = validStudents.map(e => {
-        const grade = grades.find(g => g.student_id === e.student_id);
+        const grade = filteredGrades.find(g => g.student_id === e.student_id);
         return {
             student_id: e.student_id,
             entry_number: e.student?.entry_number,
@@ -478,35 +709,117 @@ const GradeManager = ({ grades, enrollments, onUpload, courseId, token }) => {
 
     return (
         <PortalCard>
-            <div className="flex justify-between items-center mb-6">
-                <div>
-                    <h3 className="text-lg font-bold text-[rgb(var(--text))]">Grade Sheet</h3>
-                    <p className="text-sm text-[rgb(var(--muted))]">Enter marks (0-100). Changes save automatically.</p>
-                </div>
-                <div className="w-auto">
+            <div className="space-y-4">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h3 className="text-lg font-bold text-[rgb(var(--text))]">Grade Sheet</h3>
+                        <p className="text-sm text-[rgb(var(--muted))]">Enter marks (0-100). Changes save automatically.</p>
+                    </div>
+                    <div className="w-auto">
                     <PortalButton onClick={onUpload} variant="secondary">
-                        <Upload size={16} /> Import CSV
-                    </PortalButton>
+                            <Upload size={16} /> Import CSV
+                        </PortalButton>
+                    </div>
                 </div>
+
+                {/* Search and Filters */}
+                <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgb(var(--muted))] w-4 h-4" />
+                        <input
+                            type="text"
+                            placeholder="Search by entry number or name..."
+                            value={searchQuery}
+                            onChange={(e) => onSearchChange(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2 bg-[rgb(var(--bg))] border border-[rgb(var(--border))] rounded text-[rgb(var(--text))] text-sm outline-none focus:border-[rgb(var(--primary))] transition-colors"
+                        />
+                    </div>
+                    <button
+                        onClick={onToggleAdvancedFilters}
+                        className="px-3 py-2 rounded border border-[rgb(var(--border))] hover:border-[rgb(var(--primary))] transition-colors flex items-center gap-2 font-bold text-sm"
+                    >
+                        <Filter size={14} />
+                    </button>
+                </div>
+
+                {/* Advanced Filters */}
+                {showAdvancedFilters && (
+                    <div className="p-3 rounded bg-[rgb(var(--bg))] border border-[rgb(var(--border))]">
+                        <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Status</label>
+                        <select
+                            value={filterStatus}
+                            onChange={(e) => onFilterStatusChange(e.target.value)}
+                            className="w-full px-2 py-1.5 mt-1 bg-[rgb(var(--surface))] border border-[rgb(var(--border))] rounded text-xs outline-none focus:border-[rgb(var(--primary))] appearance-none cursor-pointer"
+                        >
+                            <option value="">All Status</option>
+                            <option value="published">Published</option>
+                            <option value="">Not Published</option>
+                        </select>
+                    </div>
+                )}
+
+                {/* Row Selection Bar */}
+                {tableData.length > 0 && (
+                    <div className="flex items-center gap-2 p-2 rounded bg-[rgb(var(--bg))] border border-[rgb(var(--border))]">
+                        <input
+                            type="checkbox"
+                            checked={Object.keys(selectedRows).filter(k => selectedRows[k]).length === tableData.length && tableData.length > 0}
+                            onChange={(e) => {
+                                const newSelected = {};
+                                if (e.target.checked) {
+                                    tableData.forEach(row => newSelected[row.student_id] = true);
+                                }
+                                onSelectedRowsChange(newSelected);
+                            }}
+                            className="w-3.5 h-3.5 cursor-pointer accent-[rgb(var(--primary))]"
+                        />
+                        <span className="text-xs font-bold text-[rgb(var(--muted))]">
+                            {Object.keys(selectedRows).filter(k => selectedRows[k]).length} selected
+                        </span>
+                    </div>
+                )}
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-[rgb(var(--border))]">
                 <table className="w-full text-sm min-w-[600px]">
                     <thead className="bg-[rgb(var(--bg))] text-[rgb(var(--muted))] font-bold border-b border-[rgb(var(--border))] text-left uppercase text-xs">
                         <tr>
+                            <th className="px-4 py-4 w-10 text-center">
+                                <input
+                                    type="checkbox"
+                                    checked={Object.keys(selectedRows).filter(k => selectedRows[k]).length === tableData.length && tableData.length > 0}
+                                    onChange={(e) => {
+                                        const newSelected = {};
+                                        if (e.target.checked) {
+                                            tableData.forEach(row => newSelected[row.student_id] = true);
+                                        }
+                                        onSelectedRowsChange(newSelected);
+                                    }}
+                                    disabled={tableData.length === 0}
+                                    className="cursor-pointer accent-[rgb(var(--primary))] w-4 h-4"
+                                />
+                            </th>
                             <th className="px-6 py-4">Entry Number</th>
-                            <th className="px-6 py-4">Student</th>
+                            <th className="px-6 py-4">Student Name</th>
                             <th className="px-6 py-4 text-center">Marks</th>
                             <th className="px-6 py-4 text-right">Status</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[rgb(var(--border))]">
                         {tableData.length === 0 ? (
-                            <tr><td colSpan="4" className="p-8 text-center text-[rgb(var(--muted))]">No approved students enrolled yet.</td></tr>
+                            <tr><td colSpan="5" className="p-8 text-center text-[rgb(var(--muted))]">No approved students enrolled yet.</td></tr>
                         ) : tableData.map(row => (
-                            <tr key={row.student_id} className="hover:bg-[rgb(var(--bg))] transition-colors">
+                            <tr key={row.student_id} className={`transition-colors ${selectedRows[row.student_id] ? 'bg-[rgb(var(--primary))]/5' : 'hover:bg-[rgb(var(--bg))]'}`}>
+                                <td className="px-4 py-3 text-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedRows[row.student_id] || false}
+                                        onChange={(e) => onSelectedRowsChange({...selectedRows, [row.student_id]: e.target.checked})}
+                                        className="cursor-pointer accent-[rgb(var(--primary))] w-4 h-4"
+                                    />
+                                </td>
                                 <td className="px-6 py-3 font-mono text-[rgb(var(--text))] font-bold">{row.entry_number || '—'}</td>
-                                <td className="px-6 py-3 text-[rgb(var(--muted))]">{row.email}</td>
+                                <td className="px-6 py-3 text-[rgb(var(--muted))] text-sm">N/A</td>
                                 <td className="px-6 py-3 text-center">
                                     <input
                                         type="number" min="0" max="100"
@@ -531,17 +844,17 @@ const GradeManager = ({ grades, enrollments, onUpload, courseId, token }) => {
     );
 };
 
-const EnrollmentManager = ({ enrollments, onUpdate, token }) => {
-    const [selected, setSelected] = useState(new Set());
+const EnrollmentManager = ({ filteredEnrollments, onUpdate, token, searchQuery, onSearchChange, filterStatus, onFilterStatusChange, showAdvancedFilters, onToggleAdvancedFilters, selectedRows, onSelectedRowsChange }) => {
     const [processing, setProcessing] = useState(false);
 
-    const pendingStudents = enrollments.filter(e => e.status === 'pending');
+    const _pendingStudents = filteredEnrollments.filter(e => e.status === 'pending');
 
     const handleBulk = async (status) => {
-        if (selected.size === 0) return;
+        if (Object.keys(selectedRows).filter(k => selectedRows[k]).length === 0) return;
         setProcessing(true);
         try {
-            const updatePromises = [...selected].map(id =>
+            const toUpdate = Object.keys(selectedRows).filter(k => selectedRows[k]);
+            const updatePromises = toUpdate.map(id =>
                 fetch(`${API_BASE}/enrollments/${id}/status`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -549,48 +862,95 @@ const EnrollmentManager = ({ enrollments, onUpdate, token }) => {
                 })
             );
             await Promise.all(updatePromises);
-            setSelected(new Set());
+            onSelectedRowsChange({});
             onUpdate();
-        } catch (error) { alert("Failed."); }
+        } catch (_error) { alert("Failed."); } // eslint-disable-line no-unused-vars
         finally { setProcessing(false); }
-    };
-
-    const toggleSelect = (id) => {
-        const next = new Set(selected);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-        setSelected(next);
-    };
-
-    const toggleAll = () => {
-        if (selected.size === pendingStudents.length) setSelected(new Set());
-        else setSelected(new Set(pendingStudents.map(e => e.id)));
     };
 
     return (
         <PortalCard>
-            <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-[rgb(var(--text))]">Enrollment Requests</h3>
+            <div className="space-y-4">
+                <div className="flex justify-between items-start">
+                    <h3 className="text-lg font-bold text-[rgb(var(--text))]">Enrollment Requests</h3>
 
-                <div className="flex gap-2">
-                    <PortalButton
-                        onClick={() => handleBulk('approved')}
-                        disabled={selected.size === 0 || processing}
-                        className="!w-auto !py-2 !px-4"
-                    >
-                        <Check size={16} /> Approve ({selected.size})
-                    </PortalButton>
+                    <div className="flex gap-2">
+                        <PortalButton
+                            onClick={() => handleBulk('approved')}
+                            disabled={Object.keys(selectedRows).filter(k => selectedRows[k]).length === 0 || processing}
+                            className="!w-auto !py-2 !px-4"
+                        >
+                            <Check size={16} /> Approve ({Object.keys(selectedRows).filter(k => selectedRows[k]).length})
+                        </PortalButton>
 
-                    <PortalButton
-                        onClick={() => handleBulk('rejected')}
-                        disabled={selected.size === 0 || processing}
-                        variant="danger"
-                        className="!w-auto !py-2 !px-4"
-                    >
-                        <Ban size={16} /> Reject
-                    </PortalButton>
+                        <PortalButton
+                            onClick={() => handleBulk('rejected')}
+                            disabled={Object.keys(selectedRows).filter(k => selectedRows[k]).length === 0 || processing}
+                            variant="danger"
+                            className="!w-auto !py-2 !px-4"
+                        >
+                            <Ban size={16} /> Reject
+                        </PortalButton>
+                    </div>
                 </div>
-            </div>
+
+                {/* Search and Filters */}
+                <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgb(var(--muted))] w-4 h-4" />
+                        <input
+                            type="text"
+                            placeholder="Search by entry number or name..."
+                            value={searchQuery}
+                            onChange={(e) => onSearchChange(e.target.value)}
+                            className="w-full pl-9 pr-4 py-2 bg-[rgb(var(--bg))] border border-[rgb(var(--border))] rounded text-[rgb(var(--text))] text-sm outline-none focus:border-[rgb(var(--primary))] transition-colors"
+                        />
+                    </div>
+                    <button
+                        onClick={onToggleAdvancedFilters}
+                        className="px-3 py-2 rounded border border-[rgb(var(--border))] hover:border-[rgb(var(--primary))] transition-colors flex items-center gap-2 font-bold text-sm"
+                    >
+                        <Filter size={14} />
+                    </button>
+                </div>
+
+                {/* Advanced Filters */}
+                {showAdvancedFilters && (
+                    <div className="p-3 rounded bg-[rgb(var(--bg))] border border-[rgb(var(--border))]">
+                        <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Status</label>
+                        <select
+                            value={filterStatus}
+                            onChange={(e) => onFilterStatusChange(e.target.value)}
+                            className="w-full px-2 py-1.5 mt-1 bg-[rgb(var(--surface))] border border-[rgb(var(--border))] rounded text-xs outline-none focus:border-[rgb(var(--primary))] appearance-none cursor-pointer"
+                        >
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                )}
+
+                {/* Row Selection Bar */}
+                {filteredEnrollments.length > 0 && (
+                    <div className="flex items-center gap-2 p-2 rounded bg-[rgb(var(--bg))] border border-[rgb(var(--border))]">
+                        <input
+                            type="checkbox"
+                            checked={Object.keys(selectedRows).filter(k => selectedRows[k]).length === filteredEnrollments.length && filteredEnrollments.length > 0}
+                            onChange={(e) => {
+                                const newSelected = {};
+                                if (e.target.checked) {
+                                    filteredEnrollments.forEach(enr => newSelected[enr.id] = true);
+                                }
+                                onSelectedRowsChange(newSelected);
+                            }}
+                            className="w-3.5 h-3.5 cursor-pointer accent-[rgb(var(--primary))]"
+                        />
+                        <span className="text-xs font-bold text-[rgb(var(--muted))]">
+                            {Object.keys(selectedRows).filter(k => selectedRows[k]).length} selected
+                        </span>
+                    </div>
+                )}
 
             <div className="overflow-x-auto rounded-xl border border-[rgb(var(--border))]">
                 <table className="w-full text-sm min-w-[600px]">
@@ -599,36 +959,42 @@ const EnrollmentManager = ({ enrollments, onUpdate, token }) => {
                             <th className="px-4 py-4 w-10 text-center">
                                 <input
                                     type="checkbox"
-                                    onChange={toggleAll}
-                                    checked={pendingStudents.length > 0 && selected.size === pendingStudents.length}
-                                    disabled={pendingStudents.length === 0}
+                                    onChange={(e) => {
+                                        const newSelected = {};
+                                        if (e.target.checked) {
+                                            filteredEnrollments.forEach(enr => newSelected[enr.id] = true);
+                                        }
+                                        onSelectedRowsChange(newSelected);
+                                    }}
+                                    checked={Object.keys(selectedRows).filter(k => selectedRows[k]).length === filteredEnrollments.length && filteredEnrollments.length > 0}
+                                    disabled={filteredEnrollments.length === 0}
                                     className="cursor-pointer accent-[rgb(var(--primary))] w-4 h-4"
                                 />
                             </th>
                             <th className="px-4 py-4 text-left">Entry Number</th>
-                            <th className="px-4 py-4 text-left">Student Email</th>
+                            <th className="px-4 py-4 text-left">Student Name</th>
                             <th className="px-4 py-4 text-left">Status</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[rgb(var(--border))]">
-                        {enrollments.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-[rgb(var(--muted))]">No enrollments yet.</td></tr> : enrollments.map(e => (
-                            <tr key={e.id} className={`transition-colors ${selected.has(e.id) ? 'bg-[rgb(var(--primary))]/5' : 'hover:bg-[rgb(var(--bg))]'}`}>
+                        {filteredEnrollments.length === 0 ? <tr><td colSpan="4" className="p-8 text-center text-[rgb(var(--muted))]">No enrollments found.</td></tr> : filteredEnrollments.map(e => (
+                            <tr key={e.id} className={`transition-colors ${selectedRows[e.id] ? 'bg-[rgb(var(--primary))]/5' : 'hover:bg-[rgb(var(--bg))]'}`}>
                                 <td className="px-4 py-3 text-center">
                                     <input
                                         type="checkbox"
-                                        checked={selected.has(e.id)}
-                                        onChange={() => toggleSelect(e.id)}
-                                        disabled={e.status !== 'pending'}
-                                        className={`cursor-pointer accent-[rgb(var(--primary))] w-4 h-4 ${e.status !== 'pending' ? 'opacity-20 cursor-not-allowed' : ''}`}
+                                        checked={selectedRows[e.id] || false}
+                                        onChange={(ev) => onSelectedRowsChange({...selectedRows, [e.id]: ev.target.checked})}
+                                        className="cursor-pointer accent-[rgb(var(--primary))] w-4 h-4"
                                     />
                                 </td>
                                 <td className="px-4 py-3 font-mono text-xs font-bold text-[rgb(var(--text))]">{e.student?.entry_number}</td>
-                                <td className="px-4 py-3 font-medium text-[rgb(var(--muted))]">{e.student?.email}</td>
-                                <td className="px-4 py-3"><StatusBadge status={e.status} /></td>
+                                <td className="px-4 py-3 font-medium text-xs text-[rgb(var(--text))]">{e.student?.name || 'N/A'}</td>
+                                <td className="px-4 py-3"><PortalBadge variant={e.status}>{e.status}</PortalBadge></td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
+            </div>
             </div>
         </PortalCard>
     );
@@ -648,11 +1014,48 @@ const CourseModal = ({ onClose, onSubmit, loading }) => {
     };
 
     const sessions = getSessionOptions();
-    const [form, setForm] = useState({ title: '', course_code: '', department: '', credits: 3, academic_session: sessions[1] });
+    const [departments, setDepartments] = useState([]);
+    const [form, setForm] = useState({ 
+        title: '', 
+        course_code: '', 
+        credits: 3, 
+        academic_session: sessions[1], 
+        eligible_batches: [],
+        eligible_departments: []
+    });
+
+    // Fetch departments on mount
+    useEffect(() => {
+        const fetchDepts = async () => {
+            try {
+                const res = await fetch(`${API_BASE}/departments`);
+                if (res.ok) setDepartments(await res.json());
+            } catch (e) { console.error(e); }
+        };
+        fetchDepts();
+    }, []);
+
+    const toggleBatch = (batch) => {
+        setForm(prev => ({
+            ...prev,
+            eligible_batches: prev.eligible_batches.includes(batch)
+                ? prev.eligible_batches.filter(b => b !== batch)
+                : [...prev.eligible_batches, batch]
+        }));
+    };
+
+    const toggleDepartment = (deptId) => {
+        setForm(prev => ({
+            ...prev,
+            eligible_departments: prev.eligible_departments.includes(deptId)
+                ? prev.eligible_departments.filter(d => d !== deptId)
+                : [...prev.eligible_departments, deptId]
+        }));
+    };
 
     return (
         <Modal onClose={onClose} title="Propose New Course">
-            <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="space-y-6">
+            <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="space-y-6 max-h-96 overflow-y-auto">
                 <div className="grid grid-cols-3 gap-4">
                     <div className="col-span-2 space-y-1">
                         <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Title</label>
@@ -673,18 +1076,55 @@ const CourseModal = ({ onClose, onSubmit, loading }) => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Code</label>
                         <PortalInput required value={form.course_code} onChange={e => setForm({ ...form, course_code: e.target.value })} placeholder="CS101" />
                     </div>
                     <div className="space-y-1">
-                        <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Dept</label>
-                        <PortalInput className="uppercase" required value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} placeholder="CSE" />
-                    </div>
-                    <div className="space-y-1">
                         <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Credits</label>
                         <PortalInput type="number" required min="1" max="10" value={form.credits} onChange={e => setForm({ ...form, credits: +e.target.value })} />
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Eligible Batches (Optional)</label>
+                    <div className="flex flex-wrap gap-2">
+                        {[2020, 2021, 2022, 2023, 2024, 2025].map(batch => (
+                            <button
+                                key={batch}
+                                type="button"
+                                onClick={() => toggleBatch(batch)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                    form.eligible_batches.includes(batch)
+                                        ? 'bg-[rgb(var(--primary))] text-[rgb(var(--surface))]'
+                                        : 'bg-[rgb(var(--bg))] border-2 border-[rgb(var(--border))] text-[rgb(var(--text))] hover:border-[rgb(var(--primary))]'
+                                }`}
+                            >
+                                {batch}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Eligible Departments (Optional)</label>
+                    <div className="space-y-2">
+                        {departments.length === 0 ? (
+                            <p className="text-xs text-[rgb(var(--muted))]">Loading departments...</p>
+                        ) : (
+                            departments.map(dept => (
+                                <label key={dept.id} className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.eligible_departments.includes(dept.id)}
+                                        onChange={() => toggleDepartment(dept.id)}
+                                        className="w-4 h-4 rounded accent-[rgb(var(--primary))]"
+                                    />
+                                    <span className="text-sm font-medium text-[rgb(var(--text))]">{dept.name}</span>
+                                </label>
+                            ))
+                        )}
                     </div>
                 </div>
 
@@ -696,10 +1136,39 @@ const CourseModal = ({ onClose, onSubmit, loading }) => {
     );
 };
 
-const CSVUploadModal = ({ onClose, onSubmit, loading }) => {
+const CSVUploadModal = ({ onClose, onSubmit, loading, enrollments = [], courseName = '' }) => {
     const [step, setStep] = useState('upload');
     const [parsedData, setParsedData] = useState([]);
+    const [selectedSemester, setSelectedSemester] = useState('sem-1');
     const fileInputRef = useRef(null);
+    const semesters = ['sem-1', 'sem-2', 'sem-3', 'sem-4', 'sem-5', 'sem-6', 'sem-7', 'sem-8'];
+
+    const downloadTemplate = () => {
+        const validEnrollments = enrollments.filter(e => e.status === 'approved' || e.status === 'completed');
+        
+        // Create CSV header
+        const headers = ['entry_number', 'Name', 'semester', 'marks'];
+        const csvContent = [
+            headers.join(','),
+            ...validEnrollments.slice(0, 10).map(e => 
+                [e.student?.entry_number || '', e.student?.name || '', selectedSemester, ''].join(',')
+            ),
+            ...Array.from({ length: Math.max(0, 5 - validEnrollments.length) }).map(() => ',,,')
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        const filename = `grades-template-${courseName.replace(/\s+/g, '-').toLowerCase()}-${selectedSemester}.csv`;
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const handleFile = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -707,9 +1176,15 @@ const CSVUploadModal = ({ onClose, onSubmit, loading }) => {
         reader.onload = (event) => {
             const lines = event.target.result.split(/\r\n|\n/).filter(line => line.trim() !== '');
             const rows = lines.slice(1).map((line, i) => {
-                const [entry, marks] = line.split(',');
-                return { entry_number: entry?.trim(), marks: marks?.trim(), id: i };
-            }).filter(r => r.entry_number);
+                const [entry, name, semester, marks] = line.split(',');
+                return { 
+                    entry_number: entry?.trim(), 
+                    name: name?.trim(),
+                    semester: semester?.trim() || selectedSemester,
+                    marks: marks?.trim(), 
+                    id: i 
+                };
+            }).filter(r => r.entry_number && r.marks);
             setParsedData(rows);
             setStep('preview');
         };
@@ -719,30 +1194,54 @@ const CSVUploadModal = ({ onClose, onSubmit, loading }) => {
     return (
         <Modal onClose={onClose} title="Import Grades">
             {step === 'upload' ? (
-                <div className="p-12 text-center border-2 border-dashed border-[rgb(var(--border))] rounded-2xl cursor-pointer hover:bg-[rgb(var(--bg))] transition-colors group" onClick={() => fileInputRef.current.click()}>
-                    <div className="w-12 h-12 bg-[rgb(var(--bg))] rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-[rgb(var(--primary))]/10 transition-colors">
-                        <Upload className="text-[rgb(var(--muted))] group-hover:text-[rgb(var(--primary))]" />
+                <div className="space-y-4">
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-[rgb(var(--muted))] uppercase">Select Semester</label>
+                        <select
+                            value={selectedSemester}
+                            onChange={(e) => setSelectedSemester(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg bg-[rgb(var(--bg))] border-2 border-[rgb(var(--border))] text-[rgb(var(--text))] text-sm font-medium outline-none focus:border-[rgb(var(--primary))] appearance-none cursor-pointer"
+                        >
+                            {semesters.map(sem => <option key={sem} value={sem}>{sem}</option>)}
+                        </select>
                     </div>
-                    <p className="font-bold text-[rgb(var(--text))]">Click to Upload CSV</p>
-                    <p className="text-xs text-[rgb(var(--muted))] mt-1">Required headers: entry_number, marks</p>
-                    <input type="file" hidden ref={fileInputRef} accept=".csv" onChange={handleFile} />
+                    <PortalButton onClick={downloadTemplate} variant="secondary">
+                        <Download size={16} /> Download Template
+                    </PortalButton>
+                    <div 
+                        className="p-12 text-center border-2 border-dashed border-[rgb(var(--border))] rounded-2xl cursor-pointer hover:bg-[rgb(var(--bg))] transition-colors group" 
+                        onClick={() => fileInputRef.current.click()}
+                    >
+                        <div className="w-12 h-12 bg-[rgb(var(--bg))] rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-[rgb(var(--primary))]/10 transition-colors">
+                            <Upload className="text-[rgb(var(--muted))] group-hover:text-[rgb(var(--primary))]" />
+                        </div>
+                        <p className="font-bold text-[rgb(var(--text))]">Click to Upload CSV</p>
+                        <p className="text-xs text-[rgb(var(--muted))] mt-1">Required headers: entry_number, Name, semester, marks</p>
+                        <input type="file" hidden ref={fileInputRef} accept=".csv" onChange={handleFile} />
+                    </div>
                 </div>
             ) : (
                 <div className="space-y-4">
                     <div className="bg-[rgb(var(--primary))]/10 p-3 rounded-lg text-xs text-[rgb(var(--primary))] font-bold text-center border border-[rgb(var(--primary))]/20">
-                        Previewing {parsedData.length} records
+                        Previewing {parsedData.length} records for {selectedSemester}
                     </div>
                     <div className="max-h-60 overflow-y-auto border border-[rgb(var(--border))] rounded-xl bg-[rgb(var(--bg))]">
+                        <div className="sticky top-0 flex justify-between p-3 border-b border-[rgb(var(--border))] bg-[rgb(var(--surface))] text-xs font-bold text-[rgb(var(--muted))] uppercase">
+                            <span className="flex-1">Entry No.</span>
+                            <span className="flex-1">Name</span>
+                            <span className="flex-1">Marks</span>
+                        </div>
                         {parsedData.map(r => (
                             <div key={r.id} className="flex justify-between p-3 border-b border-[rgb(var(--border))] text-sm last:border-0 hover:bg-[rgb(var(--surface))]">
-                                <span className="font-mono text-[rgb(var(--text))]">{r.entry_number}</span>
-                                <span className="font-bold text-[rgb(var(--primary))]">{r.marks}</span>
+                                <span className="flex-1 font-mono text-[rgb(var(--text))]">{r.entry_number}</span>
+                                <span className="flex-1 text-[rgb(var(--muted))]">{r.name || '-'}</span>
+                                <span className="flex-1 font-bold text-[rgb(var(--primary))]">{r.marks}</span>
                             </div>
                         ))}
                     </div>
                     <div className="flex gap-3">
                         <PortalButton variant="secondary" onClick={() => setStep('upload')}>Back</PortalButton>
-                        <PortalButton disabled={loading || parsedData.length === 0} onClick={() => onSubmit(parsedData)}>
+                        <PortalButton disabled={loading || parsedData.length === 0} onClick={() => onSubmit(parsedData, selectedSemester)}>
                             {loading ? 'Uploading...' : 'Confirm Import'}
                         </PortalButton>
                     </div>
@@ -784,7 +1283,7 @@ const SidebarItem = ({ children, active, onClick }) => (
     </div>
 );
 
-const TabButton = ({ active, children, onClick, icon: Icon }) => (
+const TabButton = ({ active, children, onClick, icon: Icon }) => ( // eslint-disable-line no-unused-vars
     <button
         onClick={onClick}
         className={`

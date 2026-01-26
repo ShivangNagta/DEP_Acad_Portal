@@ -7,10 +7,27 @@ const {
     addUser,
     updateUser,
     deleteUser,
-    getUserStats
+    getUserStats,
+    getEnrollmentDeadline,
+    setEnrollmentDeadline
 } = require('../../controllers/admin.controller');
 
-// Admin authentication
+// Departments route (no auth required for public access)
+const supabase = require('../../supabase');
+router.get('/departments', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('departments')
+            .select('*')
+            .order('name', { ascending: true });
+        if (error) throw error;
+        res.json(data);
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+// Admin authentication - all routes below require auth
 router.use(authenticate);
 router.use(authorize('admin'));
 
@@ -20,5 +37,9 @@ router.post('/users', addUser);
 router.put('/users/:id', updateUser);
 router.delete('/users/:id', deleteUser);
 router.get('/stats', getUserStats);
+
+// Enrollment deadline routes
+router.get('/enrollment-deadline', getEnrollmentDeadline);
+router.post('/enrollment-deadline', setEnrollmentDeadline);
 
 module.exports = router;
