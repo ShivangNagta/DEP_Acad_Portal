@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { LogOut, Loader2, ShieldCheck, GraduationCap, School } from 'lucide-react';
 import { API_BASE_URL } from './config/api';
 
+// Pages
+import HomePage from './pages/HomePage'; // Import the new page
 import OTPLogin from './components/OTPLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import ProfessorDashboard from './pages/ProfessorDashboard';
@@ -40,9 +42,12 @@ function App() {
 
   const logout = async () => {
     try { await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' }); } catch (e) { }
+
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+
     setUser(null);
+    window.location.href = '/';
   };
 
   if (loading) return <FullPageLoader />;
@@ -56,8 +61,18 @@ function App() {
       )}
 
       <Routes>
-        <Route path="/login" element={!user ? <OTPLogin /> : <Navigate to="/dashboard" />} />
+        {/* PUBLIC ROUTES */}
+        <Route
+          path="/"
+          element={user ? <Navigate to="/dashboard" replace /> : <HomePage />}
+        />
 
+        <Route
+          path="/login"
+          element={user ? <Navigate to="/dashboard" replace /> : <OTPLogin />}
+        />
+
+        {/* PROTECTED ROUTES */}
         <Route path="/admin" element={
           <ProtectedRoute user={user} allowedRoles={['admin']}>
             <AdminDashboard />
@@ -76,17 +91,12 @@ function App() {
           </ProtectedRoute>
         } />
 
+        {/* ROLE BASED REDIRECTOR */}
         <Route path="/dashboard" element={
           user ? <RoleRedirect role={user.role} /> : <Navigate to="/login" />
         } />
 
-        <Route
-          path="/"
-          element={
-            user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
-          }
-        />
-
+        {/* CATCH ALL */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

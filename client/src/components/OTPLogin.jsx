@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 import {
     Mail,
     KeyRound,
@@ -7,12 +8,14 @@ import {
     Sun,
     Moon,
     CheckCircle2,
-    AlertCircle
+    AlertCircle,
+    ArrowLeft // Import Back Icon
 } from 'lucide-react';
 
 import { API_BASE_URL } from '../config/api';
 
 export default function OTPLogin() {
+    const navigate = useNavigate(); // Hook for navigation
     const [email, setEmail] = useState('');
     const [otp, setOtp] = useState('');
     const [loading, setLoading] = useState(false);
@@ -20,6 +23,7 @@ export default function OTPLogin() {
     const [step, setStep] = useState('email');
     const [isDark, setIsDark] = useState(false);
 
+    // Initialize Theme
     useEffect(() => {
         if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             setIsDark(true);
@@ -84,6 +88,7 @@ export default function OTPLogin() {
             localStorage.setItem('access_token', data.user.accessToken);
             localStorage.setItem('refresh_token', data.user.refreshToken);
 
+            // Force hard reload or redirect to ensure app state updates
             window.location.href = '/dashboard';
         } catch (e) {
             setMessage({ type: 'error', text: e.message || 'Invalid or expired OTP' });
@@ -95,7 +100,26 @@ export default function OTPLogin() {
     return (
         <div className="min-h-screen flex items-center justify-center bg-[rgb(var(--bg))] text-[rgb(var(--text))] p-4 relative transition-colors duration-300">
 
-            {/* THEME TOGGLE */}
+            {/* BACK BUTTON (Top Left) */}
+            <button
+                onClick={() => navigate('/')}
+                className="
+                    absolute top-6 left-6 
+                    flex items-center gap-2
+                    px-4 py-2 rounded-xl 
+                    bg-[rgb(var(--surface))] 
+                    border border-[rgb(var(--border))] 
+                    text-[rgb(var(--muted))] font-bold text-sm
+                    hover:text-[rgb(var(--text))] hover:border-[rgb(var(--primary))]
+                    shadow-sm hover:shadow-md 
+                    transition-all duration-300 cursor-pointer active:scale-95
+                "
+                title="Back to Home"
+            >
+                <ArrowLeft size={18} /> <span className="hidden sm:inline">Home</span>
+            </button>
+
+            {/* THEME TOGGLE (Top Right) */}
             <button
                 onClick={toggleTheme}
                 className="
@@ -195,7 +219,6 @@ export default function OTPLogin() {
         </div>
     );
 }
-
 
 const InputField = ({ icon: Icon, label, className = "", ...props }) => (
     <div className="space-y-1.5 text-left">
