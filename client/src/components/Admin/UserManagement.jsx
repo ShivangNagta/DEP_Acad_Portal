@@ -179,20 +179,39 @@ export default function UserManagement() {
     const handleBulkSubmit = async (studentsList) => {
         setLoading(true);
         try {
-            const promises = studentsList.map(u =>
-                fetch(`${API_BASE}/users`, {
+            const results = [];
+            for (const user of studentsList) {
+                const res = await fetch(`${API_BASE}/users`, {
                     method: 'POST',
                     headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...u, role: 'student' })
-                })
-            );
-            await Promise.all(promises);
+                    body: JSON.stringify(user)
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    console.error(`Failed to add ${user.email}:`, data.error);
+                    results.push({ success: false, email: user.email, error: data.error });
+                } else {
+                    results.push({ success: true, email: user.email });
+                }
+            }
+            
+            const successCount = results.filter(r => r.success).length;
+            const failCount = results.filter(r => !r.success).length;
+            
             fetchUsers();
             fetchStats();
             setShowBulkModal(false);
-            setMessage(`Added ${studentsList.length} students.`);
-            setTimeout(() => setMessage(''), 3000);
-        } catch (e) { setMessage("Some errors occurred."); }
+            
+            if (failCount > 0) {
+                setMessage(`Added ${successCount} users. ${failCount} failed (check console).`);
+            } else {
+                setMessage(`Successfully added ${successCount} users.`);
+            }
+            setTimeout(() => setMessage(''), 5000);
+        } catch (e) { 
+            console.error('Bulk upload error:', e);
+            setMessage("An error occurred during bulk upload."); 
+        }
         finally { setLoading(false); }
     };
 
